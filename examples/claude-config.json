@@ -1,0 +1,12 @@
+{
+  "claude-memory": {
+    "command": "node",
+    "args": ["dist/server/index.js"],
+    "env": {
+      "MEMORY_MODE": "production",
+      "GIT_INTEGRATION": "true",
+      "MAX_MEMORY_SIZE": "100MB",
+      "LOG_LEVEL": "info"
+    }
+  }
+}

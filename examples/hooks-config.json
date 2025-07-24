@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Write|Edit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory inject-context --tool=${TOOL_NAME} --file=${TOOL_INPUT_file_path}"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory capture-event --tool=${TOOL_NAME} --status=${TOOL_STATUS} --session=${SESSION_ID}"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-memory inject-context --prompt='${USER_PROMPT}' --session=${SESSION_ID}"
+          }
+        ]
+      }
+    ]
+  }
+}
