@@ -91,7 +91,11 @@ export class FileStore {
           logger.error(`Checksum mismatch for file ${id}`);
           throw new Error(`File integrity check failed for ${id}`);
         }
-      } catch (error) {
+      } catch (error: any) {
+        // Re-throw integrity errors
+        if (error.message?.includes('File integrity check failed')) {
+          throw error;
+        }
         // Metadata file might not exist for older entries
         logger.debug(`No metadata found for file ${id}`);
       }

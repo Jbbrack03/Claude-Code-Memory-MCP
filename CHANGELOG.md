@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-07-25
+
+### Added
+- Phase 2: Hook System Implementation (COMPLETE)
+  - HookExecutor with command sandboxing and environment isolation
+  - CircuitBreaker with per-operation state management and concurrent request handling
+  - HookSystem integration with pattern matching and JSON output parsing
+  - Comprehensive test suite (45 tests passing)
+- Additional tests for Phase 1 components
+  - VectorStore tests with similarity search and persistence (17 tests)
+  - FileStore tests with sharding and checksum verification (18 tests)
+
+### Fixed
+- FileStore checksum verification now properly throws errors on integrity failures
+- HookExecutor command parsing handles complex commands with quotes correctly
+- Node command accessibility in sandboxed environments with proper PATH handling
+- CircuitBreaker concurrent operations tracking prevents exceeding failure thresholds
+- TypeScript errors in test configurations
+
+### Changed
+- HookSystem uses flexible HookConfig interface separate from main configuration
+- CircuitBreaker tracks both total and consecutive failures for better statistics
+- Improved error handling throughout hook system with non-zero exit code detection
+
+### Development
+- Test coverage now includes all Phase 1 and Phase 2 components
+- All 45 hook system tests passing
+- Follows TDD Red-Green-Refactor cycle throughout implementation
+
 ## [0.1.0] - 2025-07-25
 
 ### Added
