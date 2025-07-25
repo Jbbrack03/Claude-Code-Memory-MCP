@@ -11,11 +11,10 @@ export interface HookEvent {
 }
 
 export class HookSystem {
-  private config: Config["hooks"];
   private initialized = false;
 
-  constructor(config: Config["hooks"]) {
-    this.config = config;
+  // @ts-ignore - config will be used in implementation
+  constructor(private config: Config["hooks"]) {
   }
 
   async initialize(): Promise<void> {

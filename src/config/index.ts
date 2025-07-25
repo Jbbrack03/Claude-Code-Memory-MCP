@@ -1,13 +1,9 @@
 import { z } from "zod";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 
 // Load environment variables
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Configuration schema
 const ConfigSchema = z.object({
@@ -15,7 +11,7 @@ const ConfigSchema = z.object({
   server: z.object({
     name: z.string().default("claude-memory-mcp"),
     version: z.string().default("0.1.0"),
-    mode: z.enum(["development", "production"]).default("production"),
+    mode: z.enum(["development", "production", "test"]).default("production"),
     logLevel: z.enum(["error", "warn", "info", "debug"]).default("info")
   }),
 

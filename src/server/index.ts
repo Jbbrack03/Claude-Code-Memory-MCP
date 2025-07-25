@@ -64,14 +64,13 @@ function registerTools() {
       title: "Capture Memory",
       description: "Capture an event or memory from Claude Code",
       inputSchema: {
-        type: z.object({
-          eventType: z.string(),
-          content: z.string(),
-          metadata: z.record(z.any()).optional()
-        })
+        eventType: z.string(),
+        content: z.string(),
+        metadata: z.record(z.any()).optional()
       }
     },
-    async ({ eventType, content, metadata }) => {
+    async (args) => {
+      const { eventType, content, metadata } = args;
       try {
         const memory = await storage.captureMemory({
           eventType,
@@ -107,14 +106,13 @@ function registerTools() {
       title: "Retrieve Memories",
       description: "Retrieve relevant memories based on context",
       inputSchema: {
-        type: z.object({
-          query: z.string(),
-          limit: z.number().optional().default(10),
-          filters: z.record(z.any()).optional()
-        })
+        query: z.string(),
+        limit: z.number().optional().default(10),
+        filters: z.record(z.any()).optional()
       }
     },
-    async ({ query, limit, filters }) => {
+    async (args) => {
+      const { query, limit, filters } = args;
       try {
         const memories = await intelligence.retrieveMemories(query, {
           limit,
@@ -146,9 +144,7 @@ function registerTools() {
     {
       title: "Git State",
       description: "Get current Git repository state",
-      inputSchema: {
-        type: z.object({})
-      }
+      inputSchema: {}
     },
     async () => {
       try {
