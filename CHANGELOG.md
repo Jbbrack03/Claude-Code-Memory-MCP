@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-07-25
+
+### Added
+- Phase 3: Git Integration (COMPLETE)
+  - GitMonitor for real-time repository state tracking
+  - GitValidator for memory validation against Git state
+  - GitIntegration orchestrating monitor and validator subsystems
+  - Branch change detection with EventEmitter
+  - File change monitoring and dirty state detection
+  - Commit and branch validation
+  - Comprehensive test suite (35 tests passing)
+- Hook configuration documentation guide
+- Integration tests for complete MCP server
+
+### Fixed
+- Git status parsing now correctly preserves leading spaces
+- GitMonitor.close() made synchronous to resolve ESLint warning
+- Command injection security enhancements in HookExecutor
+
+### Security
+- Enhanced command injection prevention with sophisticated parsing
+- Detection for command substitution (backticks and $())
+- Improved pattern detection for pipes, redirections, and chaining
+
+### Changed
+- Updated repository URL in package.json
+- Improved error handling in Git subsystem with graceful degradation
+
+### Development
+- Phase 3 completed with full test coverage
+- All 35 Git integration tests passing
+- TypeScript compilation successful
+- Total test count: 120 tests passing across all subsystems
+- Test coverage: 78.88%
+
 ## [0.2.0] - 2025-07-25
 
 ### Added

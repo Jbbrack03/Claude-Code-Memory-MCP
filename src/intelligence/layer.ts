@@ -21,6 +21,7 @@ export interface RetrievedMemory {
 export class IntelligenceLayer {
   private config: Config["intelligence"];
   private initialized = false;
+  private embeddingService?: (text: string) => Promise<number[]>;
 
   constructor(config: Config["intelligence"]) {
     this.config = config;
@@ -37,12 +38,21 @@ export class IntelligenceLayer {
     logger.info("Intelligence layer initialized");
   }
 
+  setEmbeddingService(service: (text: string) => Promise<number[]>): void {
+    this.embeddingService = service;
+  }
+
   async generateEmbedding(text: string): Promise<number[]> {
     if (!this.initialized) {
       throw new Error("Intelligence layer not initialized");
     }
 
     logger.debug("Generating embedding", { textLength: text.length });
+    
+    // Use provided embedding service if available
+    if (this.embeddingService) {
+      return await this.embeddingService(text);
+    }
     
     // TODO: Check cache
     // TODO: Generate embedding using model

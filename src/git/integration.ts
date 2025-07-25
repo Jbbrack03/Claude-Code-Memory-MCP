@@ -1,13 +1,12 @@
 import { createLogger } from "../utils/logger.js";
 import type { Config } from "../config/index.js";
+import { GitMonitor, type GitState as MonitorState } from "./monitor.js";
+import { GitValidator } from "./validator.js";
+import type { Memory } from "../storage/engine.js";
 
 const logger = createLogger("GitIntegration");
 
-export interface GitState {
-  initialized: boolean;
-  currentBranch?: string;
-  currentCommit?: string;
-  isDirty: boolean;
+export interface GitState extends MonitorState {
   remote?: string;
   behind: number;
   ahead: number;
@@ -16,12 +15,8 @@ export interface GitState {
 export class GitIntegration {
   private config: Config["git"];
   private initialized = false;
-  private gitState: GitState = {
-    initialized: false,
-    isDirty: false,
-    behind: 0,
-    ahead: 0
-  };
+  private monitor?: GitMonitor;
+  private validator?: GitValidator;
 
   constructor(config: Config["git"]) {
     this.config = config;
@@ -35,47 +30,86 @@ export class GitIntegration {
       return;
     }
 
-    // TODO: Check if in Git repository
-    // TODO: Get current branch
-    // TODO: Get current commit
-    // TODO: Check repository status
-    // TODO: Setup file watchers
+    // Initialize Git monitor
+    this.monitor = new GitMonitor({
+      autoDetect: true,
+      checkInterval: this.config.validation.checkInterval
+    });
+    await this.monitor.initialize();
+
+    // Initialize Git validator
+    this.validator = new GitValidator({
+      workspacePath: process.cwd()
+    });
+
+    // Start monitoring if we're in a git repository
+    if (this.monitor.isGitRepository()) {
+      this.monitor.startWatching();
+      
+      // Listen for branch changes
+      this.monitor.on('branchChange', (data) => {
+        logger.info("Branch changed", data);
+      });
+
+      // Listen for state changes
+      this.monitor.on('stateChange', (state) => {
+        logger.debug("Git state changed", state);
+      });
+    }
     
     this.initialized = true;
-    logger.info("Git integration initialized");
+    logger.info("Git integration initialized", {
+      isGitRepo: this.monitor.isGitRepository(),
+      repoRoot: this.monitor.getRepositoryRoot()
+    });
   }
 
   async getCurrentState(): Promise<GitState> {
-    if (!this.initialized || !this.config.enabled) {
-      return this.gitState;
+    if (!this.initialized || !this.config.enabled || !this.monitor) {
+      return {
+        initialized: false,
+        isDirty: false,
+        behind: 0,
+        ahead: 0
+      };
     }
 
-    // TODO: Refresh Git state
-    // TODO: Check for branch changes
-    // TODO: Check for new commits
+    const monitorState = await this.monitor.getCurrentState();
     
-    return this.gitState;
+    // TODO: Get remote tracking info (behind/ahead counts)
+    
+    return {
+      ...monitorState,
+      behind: 0,
+      ahead: 0
+    };
   }
 
-  async validateMemory(memoryId: string): Promise<boolean> {
-    if (!this.initialized || !this.config.enabled) {
+  async validateMemory(memory: Memory): Promise<boolean> {
+    if (!this.initialized || !this.config.enabled || !this.validator) {
       return true;
     }
 
-    logger.debug("Validating memory against Git", { memoryId });
+    logger.debug("Validating memory against Git", { memoryId: memory.id });
     
-    // TODO: Check if referenced files exist in Git
-    // TODO: Validate file contents match
-    // TODO: Check branch availability
+    const result = await this.validator.validateMemory(memory);
     
-    return true;
+    if (!result.valid) {
+      logger.warn("Memory validation failed", {
+        memoryId: memory.id,
+        issues: result.issues
+      });
+    }
+    
+    return result.valid;
   }
 
   async close(): Promise<void> {
     logger.info("Closing Git integration...");
     
-    // TODO: Stop file watchers
-    // TODO: Cleanup resources
+    if (this.monitor) {
+      this.monitor.close();
+    }
     
     this.initialized = false;
     logger.info("Git integration closed");

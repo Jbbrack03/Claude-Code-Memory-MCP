@@ -14,11 +14,14 @@ npm start                # Run compiled server (node dist/server/index.js)
 
 ### Testing
 ```bash
-npm test                 # Run all tests
+npm test                 # Run all tests (120 tests as of 2025-07-25)
 npm run test:watch       # Run tests in watch mode
-npm run test:coverage    # Run tests with coverage report
+npm run test:coverage    # Run tests with coverage report (78.88% coverage)
 npx jest path/to/file.test.ts    # Run specific test file
 npx jest -t "test name"          # Run tests matching pattern
+
+# Integration tests
+npm test tests/integration/mcp-server.test.ts  # Run MCP integration tests
 ```
 
 ### Code Quality
@@ -27,6 +30,13 @@ npm run lint             # Run ESLint
 npm run lint:fix         # Fix ESLint issues
 npm run typecheck        # Type check without building (tsc --noEmit)
 ```
+When implementing new features:
+1. Use test-architect to plan the test strategy
+2. Use test-writer to create failing tests
+3. Use implementation-verifier to write minimal passing code
+4. Use refactoring-specialist to improve the code
+5. Use test-coverage-analyst to verify coverage
+6. Use test-quality-auditor for final review
 
 ## Architecture Overview
 
@@ -82,20 +92,30 @@ The server consists of five main subsystems initialized in `src/server/index.ts`
 ## Implementation Status
 
 The project follows TDD with an 8-phase implementation plan (see IMPLEMENTATION.md):
-- Phase 1: Storage Engine Foundation
-- Phase 2: Hook System Implementation  
-- Phase 3: Git Integration
-- Phase 4: Intelligence Layer
-- Phase 5: MCP Server Integration
-- Phase 6: Production Hardening
-- Phase 7: Performance Optimization
-- Phase 8: Release Preparation
+- ✅ Phase 1: Storage Engine Foundation (COMPLETE)
+- ✅ Phase 2: Hook System Implementation (COMPLETE)
+- 🔲 Phase 3: Git Integration (stub implementation)
+- 🔲 Phase 4: Intelligence Layer (stub implementation)
+- 🔲 Phase 5: MCP Server Integration
+- 🔲 Phase 6: Production Hardening
+- 🔲 Phase 7: Performance Optimization
+- 🔲 Phase 8: Release Preparation
 
-Currently, the project has:
-- Complete project structure and configuration
-- MCP server skeleton with registered tools/resources
-- Stub implementations for all subsystems
-- Comprehensive test specifications in IMPLEMENTATION.md
+### Current Status (2025-07-25):
+- **Completed**: Phases 1 and 2 with full test coverage
+- **Test Suite**: 120 tests passing, 78.88% coverage
+- **Storage Engine**: Fully implemented with SQLite, Vector Store, and File Store
+- **Hook System**: Complete with executor, circuit breaker, and security sandboxing
+- **Security Enhancements**: Advanced command injection prevention with comprehensive parsing
+- **Documentation**: Hook configuration guide added at `docs/hook-configuration.md`
+- **Integration Tests**: 13 comprehensive integration tests covering all subsystems
+
+### Recent Improvements:
+- Enhanced command parser security to prevent sophisticated injection attacks
+- Added detection for command substitution (backticks and `$()`)
+- Updated package.json repository URLs
+- Created comprehensive hook configuration documentation
+- Added full integration test suite for MCP server components
 
 ## Testing Approach
 
@@ -115,6 +135,37 @@ Jest configured for ESM with ts-jest. Tests use `.test.ts` extension.
 
 ## Security Considerations
 - Hooks run in sandboxed environment with resource limits
+- Advanced command injection prevention with pattern detection:
+  - Command chaining (`;`, `&&`, `||`)
+  - Pipe operations (`|`)
+  - Redirections (`>`, `<`)
+  - Command substitution (`` ` ``, `$()`)
+  - Newline injection
 - Sensitive data detection and redaction
 - No storage of credentials or secrets
-- Command injection prevention in hook executor
+- Environment variable isolation in hook execution
+- Circuit breaker pattern to prevent cascading failures
+
+## Key Files and Resources
+
+### Documentation
+- `IMPLEMENTATION.md` - Detailed 8-phase implementation plan with test specifications
+- `docs/hook-configuration.md` - Comprehensive guide for configuring hooks
+- `STATUS_2025-07-25_08h40_PHASE2_COMPLETE.md` - Latest implementation status
+
+### Core Implementation
+- `src/server/index.ts` - MCP server entry point with tool/resource registration
+- `src/storage/engine.ts` - Multi-layer storage orchestration
+- `src/hooks/system.ts` - Hook execution with circuit breaker
+- `src/hooks/executor.ts` - Secure command execution sandbox
+- `src/config/index.ts` - Configuration with Zod validation
+
+### Tests
+- `tests/storage/` - Storage subsystem tests (SQLite, Vector, File Store)
+- `tests/hooks/` - Hook system tests (Executor, Circuit Breaker, System)
+- `tests/integration/mcp-server.test.ts` - Full integration tests
+
+### Configuration
+- `.env` - Environment variables (create from `.env.example`)
+- `package.json` - Dependencies and scripts
+- `tsconfig.json` - TypeScript configuration for ESM

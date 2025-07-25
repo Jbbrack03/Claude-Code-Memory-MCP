@@ -1,6 +1,6 @@
 {
   "name": "claude-memory-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A defensive, Git-aware MCP server providing persistent memory for Claude Code sessions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -61,10 +61,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/claude-memory-mcp.git"
+    "url": "https://github.com/anthropic/claude-memory-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/claude-memory-mcp/issues"
+    "url": "https://github.com/anthropic/claude-memory-mcp/issues"
   },
-  "homepage": "https://github.com/yourusername/claude-memory-mcp#readme"
+  "homepage": "https://github.com/anthropic/claude-memory-mcp#readme"
 }

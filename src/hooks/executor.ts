@@ -77,17 +77,43 @@ export class HookExecutor {
   }
 
   private parseCommand(command: string): string[] {
-    // Simple command parsing - in production would use a proper shell parser
-    // For now, only check for obvious command injection attempts when not using quotes
-    const dangerousPatterns = [';', '&&', '||', '|', '>', '<'];
-    let inQuotesCheck = false;
+    // Enhanced command parsing with security checks
+    // Check for dangerous patterns including command substitution
+    const dangerousPatterns = [';', '&&', '||', '|', '>', '<', '\n', '\r'];
+    let inQuotes = false;
+    let quoteChar = '';
     let hasInjection = false;
     
+    // First pass: check for command substitution and dangerous patterns
     for (let i = 0; i < command.length; i++) {
       const char = command[i];
-      if ((char === '"' || char === "'") && (i === 0 || command[i-1] !== '\\')) {
-        inQuotesCheck = !inQuotesCheck;
-      } else if (!inQuotesCheck && dangerousPatterns.some(p => command.substring(i).startsWith(p))) {
+      const prevChar = i > 0 ? command[i-1] : '';
+      
+      // Track quote state
+      if ((char === '"' || char === "'") && prevChar !== '\\') {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteChar = char;
+        } else if (char === quoteChar) {
+          inQuotes = false;
+          quoteChar = '';
+        }
+      }
+      
+      // Check for backticks (command substitution)
+      if (char === '`') {
+        hasInjection = true;
+        break;
+      }
+      
+      // Check for $(...) command substitution
+      if (char === '$' && i + 1 < command.length && command[i + 1] === '(') {
+        hasInjection = true;
+        break;
+      }
+      
+      // Check dangerous patterns outside quotes
+      if (!inQuotes && dangerousPatterns.some(p => command.substring(i).startsWith(p))) {
         hasInjection = true;
         break;
       }
@@ -97,11 +123,11 @@ export class HookExecutor {
       throw new Error(`Command not allowed: ${command}`);
     }
 
-    // Basic parsing - handles quoted strings
+    // Second pass: parse command into parts
     const parts: string[] = [];
     let current = '';
-    let inQuotes = false;
-    let quoteChar = '';
+    inQuotes = false;
+    quoteChar = '';
 
     for (let i = 0; i < command.length; i++) {
       const char = command[i];

@@ -254,5 +254,71 @@ describe('HookExecutor', () => {
       await expect(executor.execute('echo test; rm -rf /'))
         .rejects.toThrow('Command not allowed: echo test; rm -rf /');
     });
+
+    it('should handle sophisticated injection attempts', async () => {
+      // Given: Executor with echo allowed
+      executor = new HookExecutor({
+        sandbox: { allowedCommands: ['echo'] }
+      });
+      
+      // Test various injection patterns
+      const injectionPatterns = [
+        'echo test && rm -rf /',
+        'echo test || rm -rf /',
+        'echo test | cat /etc/passwd',
+        'echo test > /etc/passwd',
+        'echo test < /etc/passwd',
+        'echo `rm -rf /`',
+        'echo $(rm -rf /)',
+        'echo test\nrm -rf /',
+        'echo test\r\nrm -rf /',
+      ];
+      
+      for (const pattern of injectionPatterns) {
+        await expect(executor.execute(pattern))
+          .rejects.toThrow(/Command not allowed/);
+      }
+    });
+
+    it('should properly handle quoted arguments with special characters', async () => {
+      // Given: Executor with echo allowed
+      executor = new HookExecutor({
+        sandbox: { allowedCommands: ['echo'] }
+      });
+      
+      // When: Using quoted strings with special chars
+      const result = await executor.execute('echo "test; with; semicolons"');
+      
+      // Then: Should treat as single argument
+      expect(result.stdout).toBe('test; with; semicolons\n');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('should handle mixed quotes properly', async () => {
+      // Given: Executor with echo allowed
+      executor = new HookExecutor({
+        sandbox: { allowedCommands: ['echo'] }
+      });
+      
+      // When: Using mixed quotes
+      const result = await executor.execute('echo "test \'with\' mixed quotes"');
+      
+      // Then: Should preserve inner quotes
+      expect(result.stdout).toBe('test \'with\' mixed quotes\n');
+    });
+
+    it('should reject backticks and command substitution', async () => {
+      // Given: Executor with echo allowed
+      executor = new HookExecutor({
+        sandbox: { allowedCommands: ['echo'] }
+      });
+      
+      // When: Attempting command substitution
+      await expect(executor.execute('echo `whoami`'))
+        .rejects.toThrow(/Command not allowed/);
+        
+      await expect(executor.execute('echo $(whoami)'))
+        .rejects.toThrow(/Command not allowed/);
+    });
   });
 });
