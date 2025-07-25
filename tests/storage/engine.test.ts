@@ -260,6 +260,151 @@ describe('StorageEngine', () => {
     });
   });
 
+  describe('memory querying', () => {
+    beforeEach(async () => {
+      await engine.initialize();
+    });
+
+    it('should query memories by workspace', async () => {
+      // Given: Memories in different workspaces
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'workspace1 content',
+        workspaceId: 'ws1',
+        sessionId: 's1',
+        timestamp: new Date()
+      });
+      
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'workspace2 content',
+        workspaceId: 'ws2',
+        sessionId: 's2',
+        timestamp: new Date()
+      });
+      
+      // When: Querying workspace 1
+      const memories = await engine.queryMemories({ workspaceId: 'ws1' });
+      
+      // Then: Only workspace 1 memories returned
+      expect(memories).toHaveLength(1);
+      expect(memories[0]!.content).toBe('workspace1 content');
+    });
+
+    it('should query memories by event type', async () => {
+      // Given: Memories with different event types
+      await engine.captureMemory({
+        eventType: 'file_write',
+        content: 'File write content',
+        sessionId: 'test',
+        timestamp: new Date()
+      });
+      
+      await engine.captureMemory({
+        eventType: 'command_run',
+        content: 'Command run content',
+        sessionId: 'test',
+        timestamp: new Date()
+      });
+      
+      // When: Querying by event type
+      const memories = await engine.queryMemories({ eventType: 'file_write' });
+      
+      // Then: Only file_write memories returned
+      expect(memories).toHaveLength(1);
+      expect(memories[0]!.eventType).toBe('file_write');
+    });
+
+    it('should query memories by session', async () => {
+      // Given: Memories in different sessions
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'Session 1 content',
+        sessionId: 'session1',
+        timestamp: new Date()
+      });
+      
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'Session 2 content',
+        sessionId: 'session2',
+        timestamp: new Date()
+      });
+      
+      // When: Querying by session
+      const memories = await engine.queryMemories({ sessionId: 'session1' });
+      
+      // Then: Only session 1 memories returned
+      expect(memories).toHaveLength(1);
+      expect(memories[0]!.sessionId).toBe('session1');
+    });
+
+    it('should support limit and ordering', async () => {
+      // Given: Multiple memories with different timestamps
+      const now = Date.now();
+      for (let i = 0; i < 5; i++) {
+        await engine.captureMemory({
+          eventType: 'test',
+          content: `Memory ${i}`,
+          sessionId: 'test',
+          timestamp: new Date(now + i * 1000) // Each 1 second apart
+        });
+      }
+      
+      // When: Querying with limit
+      const memories = await engine.queryMemories({ 
+        sessionId: 'test',
+        limit: 3,
+        orderBy: 'timestamp',
+        orderDirection: 'DESC'
+      });
+      
+      // Then: Returns limited results in correct order
+      expect(memories).toHaveLength(3);
+      expect(memories[0]!.content).toBe('Memory 4'); // Latest first
+      expect(memories[1]!.content).toBe('Memory 3');
+      expect(memories[2]!.content).toBe('Memory 2');
+    });
+
+    it('should support date range queries', async () => {
+      // Given: Memories across different dates
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const today = new Date();
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'Yesterday',
+        sessionId: 'test',
+        timestamp: yesterday
+      });
+      
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'Today',
+        sessionId: 'test',
+        timestamp: today
+      });
+      
+      await engine.captureMemory({
+        eventType: 'test',
+        content: 'Tomorrow',
+        sessionId: 'test',
+        timestamp: tomorrow
+      });
+      
+      // When: Querying date range
+      const memories = await engine.queryMemories({
+        startTime: yesterday,
+        endTime: today
+      });
+      
+      // Then: Only memories in range returned
+      expect(memories).toHaveLength(2);
+      expect(memories.map(m => m.content)).toEqual(['Yesterday', 'Today']);
+    });
+  });
+
   describe('error handling', () => {
     it('should handle database errors gracefully', async () => {
       // Given: An engine with invalid database path

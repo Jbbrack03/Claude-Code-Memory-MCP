@@ -289,6 +289,14 @@ export class SQLiteDatabase {
     return this.db.prepare(query).all();
   }
 
+  async run(query: string, params?: any[]): Promise<any> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    const stmt = this.db.prepare(query);
+    return params ? stmt.run(...params) : stmt.run();
+  }
+
   async count(table: string): Promise<number> {
     if (!this.db) {
       throw new Error('Database not initialized');
@@ -324,6 +332,84 @@ export class SQLiteDatabase {
     });
 
     return transaction();
+  }
+
+  async queryMemories(filters: {
+    workspaceId?: string;
+    sessionId?: string;
+    eventType?: string;
+    gitBranch?: string;
+    startTime?: Date;
+    endTime?: Date;
+    limit?: number;
+    orderBy?: string;
+    orderDirection?: 'ASC' | 'DESC';
+  } = {}): Promise<Memory[]> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (filters.workspaceId !== undefined) {
+      conditions.push('workspace_id = ?');
+      params.push(filters.workspaceId);
+    }
+
+    if (filters.sessionId) {
+      conditions.push('session_id = ?');
+      params.push(filters.sessionId);
+    }
+
+    if (filters.eventType) {
+      conditions.push('event_type = ?');
+      params.push(filters.eventType);
+    }
+
+    if (filters.gitBranch) {
+      conditions.push('git_branch = ?');
+      params.push(filters.gitBranch);
+    }
+
+    if (filters.startTime) {
+      conditions.push('timestamp >= ?');
+      params.push(filters.startTime.toISOString());
+    }
+
+    if (filters.endTime) {
+      conditions.push('timestamp <= ?');
+      params.push(filters.endTime.toISOString());
+    }
+
+    let query = 'SELECT * FROM memories';
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    // Add ordering
+    const orderBy = filters.orderBy || 'timestamp';
+    const orderDirection = filters.orderDirection || 'ASC';
+    query += ` ORDER BY ${orderBy} ${orderDirection}`;
+
+    // Add limit
+    if (filters.limit) {
+      query += ` LIMIT ${filters.limit}`;
+    }
+
+    const rows = this.db.prepare(query).all(...params) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      eventType: row.event_type,
+      content: row.content,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      timestamp: new Date(row.timestamp),
+      sessionId: row.session_id,
+      workspaceId: row.workspace_id,
+      gitBranch: row.git_branch,
+      gitCommit: row.git_commit
+    }));
   }
 
   async close(): Promise<void> {
