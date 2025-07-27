@@ -5,6 +5,7 @@ export default {
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js'
   },
   transform: {
     '^.+\\.tsx?$': [

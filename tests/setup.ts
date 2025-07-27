@@ -1,4 +1,5 @@
 // Jest setup file for common test configuration
+import { jest, afterAll } from "@jest/globals";
 
 // Extend Jest timeout for async operations
 jest.setTimeout(10000);

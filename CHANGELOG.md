@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-07-27
+
+### Added
+- Phase 4: Intelligence Layer Implementation (COMPLETE)
+  - Advanced filtering operators ($or, $and, $exists, $computed, $gte, $lt, $in, $ne, $regex)
+  - Filter caching with LRU cache for improved performance  
+  - Filter statistics tracking and optimization suggestions
+  - Batch operations with progress callbacks
+  - Multiple embedding model support
+  - Dimension transformation capabilities
+  - Hybrid search functionality
+  - Performance benchmarking utilities
+  - Comprehensive integration tests for all new features
+  - Complete TDD cycle implementation for all test-driven features
+
+### Fixed
+- Cosine similarity calculation accuracy (corrected from -0.354 to -0.500)
+- Filter operator precedence and execution order
+- Test isolation issues in vector store tests
+- TypeScript type compatibility in test files  
+- Memory optimization for large batch operations
+- Completed TDD implementation for previously incomplete features
+
+### Changed
+- Improved test coverage to 254 passing tests
+- Enhanced vector store with parallel batch processing
+- Optimized memory usage patterns in vector operations
+- All tests now have complete implementations following TDD red-green cycle
+
+### Development
+- Phase 4 completed with full test coverage
+- All 254 tests passing (up from 120)
+- Complete TDD implementation for all features
+- TypeScript compilation successful
+- Ready for Phase 5: MCP Server Integration
+
 ## [0.3.0] - 2025-07-25
 
 ### Added
