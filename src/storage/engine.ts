@@ -202,6 +202,13 @@ export class StorageEngine {
     };
   }
 
+  async getVectorStore(): Promise<VectorStore | null> {
+    if (!this.initialized || !this.vectorStore) {
+      return null;
+    }
+    return this.vectorStore;
+  }
+
   async close(): Promise<void> {
     logger.info("Closing storage engine...");
     

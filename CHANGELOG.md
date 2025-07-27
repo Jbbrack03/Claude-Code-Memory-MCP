@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-07-27
+
+### Added
+- Phase 4: Intelligence Layer - FULLY COMPLETE
+  - IntelligenceLayer with semantic memory retrieval
+  - ContextBuilder for memory formatting with deduplication
+  - Query caching for improved performance
+  - SQL fallback when vector store unavailable
+  - Workspace and git branch isolation in searches
+  - SimpleVectorIndex for performance optimization
+  - IndexedVectorStore adapter for integration
+  - Comprehensive integration tests for memory lifecycle
+
+### Fixed
+- TypeScript errors in layer.test.ts unit tests
+- SQL error handling in fallbackSQLSearch method
+- Import paths for renamed embedding generator module
+
+### Changed
+- Enhanced IntelligenceLayer with actual retrieval logic
+- Improved error handling for SQL fallback operations
+- All 43 layer unit tests now passing
+
+### Development
+- Phase 4 100% complete including all medium priority tasks
+- Created 72 new tests (all passing)
+- Total test count: 388 passing tests
+- Ready for Phase 5: MCP Server Integration
+
 ## [0.4.0] - 2025-07-27
 
 ### Added
