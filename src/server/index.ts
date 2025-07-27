@@ -38,8 +38,8 @@ async function initialize() {
     git = new GitIntegration(config.git);
     await git.initialize();
 
-    // Initialize intelligence layer
-    intelligence = new IntelligenceLayer(config.intelligence);
+    // Initialize intelligence layer with storage reference
+    intelligence = new IntelligenceLayer(config.intelligence, storage);
     await intelligence.initialize();
 
     // Register tools
@@ -157,6 +157,49 @@ function registerTools() {
         };
       } catch (error) {
         logger.error("Failed to get git state:", error);
+        return {
+          content: [{
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Build context tool
+  server.registerTool(
+    "build-context",
+    {
+      title: "Build Context",
+      description: "Build formatted context from memories for injection",
+      inputSchema: {
+        query: z.string(),
+        limit: z.number().optional().default(10),
+        filters: z.record(z.any()).optional()
+      }
+    },
+    async (args) => {
+      const { query, limit, filters } = args;
+      try {
+        // First retrieve relevant memories
+        const memories = await intelligence.retrieveMemories(query, {
+          limit,
+          filters
+        });
+        
+        // Then build context from them
+        const context = await intelligence.buildContext(memories);
+        
+        return {
+          content: [{
+            type: "text",
+            text: context
+          }]
+        };
+      } catch (error) {
+        logger.error("Failed to build context:", error);
         return {
           content: [{
             type: "text",

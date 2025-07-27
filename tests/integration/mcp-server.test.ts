@@ -32,20 +32,15 @@ describe('MCP Server Integration', () => {
     git = new GitIntegration(testConfig.git);
     await git.initialize();
 
-    intelligence = new IntelligenceLayer(testConfig.intelligence);
+    // Create mock embedding generator for testing
+    const mockEmbeddingGenerator = {
+      initialize: jest.fn(() => Promise.resolve()),
+      generate: jest.fn(() => Promise.resolve(new Array(384).fill(0).map(() => Math.random()))),
+      close: jest.fn(() => Promise.resolve())
+    } as any;
+
+    intelligence = new IntelligenceLayer(testConfig.intelligence, storage, mockEmbeddingGenerator);
     await intelligence.initialize();
-    
-    // Set embedding service for intelligence layer
-    intelligence.setEmbeddingService(async (_text: string) => {
-      // Mock embedding service
-      return new Array(384).fill(0).map(() => Math.random());
-    });
-    
-    // Set embedding service for storage
-    storage.setEmbeddingService(async (_text: string) => {
-      // Mock embedding service
-      return new Array(384).fill(0).map(() => Math.random());
-    });
   });
 
   afterEach(async () => {

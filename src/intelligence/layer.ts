@@ -271,7 +271,7 @@ export class IntelligenceLayer {
       // Simple relevance scoring based on query terms
       const queryTerms = query.toLowerCase().split(/\s+/);
       
-      return memories
+      const results = memories
         .map(memory => {
           const content = memory.content.toLowerCase();
           let score = 0;
@@ -297,6 +297,12 @@ export class IntelligenceLayer {
         .filter(m => m.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, options.limit);
+      
+      // Cache SQL fallback results too
+      const cacheKey = JSON.stringify({ query, options });
+      this.queryCache.set(cacheKey, results);
+      
+      return results;
     } catch (error) {
       logger.error("Failed to perform SQL fallback search", error);
       return [];
