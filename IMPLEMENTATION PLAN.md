@@ -966,3 +966,914 @@ The key insight is that Phase 4 needed to be split into two parts:
 - Phase 4.5: Integrate components into working system
 
 This ensures the foundation is solid before proceeding to MCP integration and production hardening.
+
+## Phase 6: Production Hardening (4 days)
+
+### Overview
+This phase addresses critical issues discovered during code review and prepares the system for production deployment by implementing robust error handling, security enhancements, and operational features.
+
+### 6.1 Fix Critical Performance Issues
+
+#### 6.1.1 Implement Scalable Vector Index (CRITICAL)
+**Issue**: Current O(n) vector search won't scale beyond 10K vectors
+**Priority**: Must fix before Phase 7
+
+```typescript
+// src/intelligence/vector-index.ts - Implement HNSW index
+import { HNSWIndex } from 'hnswlib-node'; // or similar library
+
+export class ScalableVectorIndex implements VectorIndex {
+  private index: HNSWIndex;
+  private idMapping: Map<number, string> = new Map();
+  private reverseMapping: Map<string, number> = new Map();
+  private nextId = 0;
+
+  constructor(dimension: number, maxElements: number = 1000000) {
+    this.index = new HNSWIndex('cosine', dimension);
+    this.index.initIndex(maxElements);
+  }
+
+  async add(id: string, vector: number[]): Promise<void> {
+    const internalId = this.nextId++;
+    this.idMapping.set(internalId, id);
+    this.reverseMapping.set(id, internalId);
+    this.index.addPoint(vector, internalId);
+  }
+
+  async search(query: number[], k: number): Promise<Array<{id: string; score: number}>> {
+    const results = this.index.searchKNN(query, k);
+    return results.neighbors.map((internalId, idx) => ({
+      id: this.idMapping.get(internalId) || '',
+      score: 1 - results.distances[idx] // Convert distance to similarity
+    }));
+  }
+
+  async remove(id: string): Promise<void> {
+    const internalId = this.reverseMapping.get(id);
+    if (internalId !== undefined) {
+      // Note: HNSW doesn't support deletion, need to track deleted IDs
+      this.idMapping.delete(internalId);
+      this.reverseMapping.delete(id);
+    }
+  }
+
+  size(): number {
+    return this.reverseMapping.size;
+  }
+
+  // Persistence methods for production
+  async save(path: string): Promise<void> {
+    await this.index.writeIndex(path);
+    // Also save ID mappings
+  }
+
+  async load(path: string): Promise<void> {
+    await this.index.readIndex(path);
+    // Also load ID mappings
+  }
+}
+```
+
+#### 6.1.2 Update VectorStore to Use Scalable Index
+
+```typescript
+// src/storage/vector-store.ts - Update to use ScalableVectorIndex
+export class VectorStore {
+  private index: ScalableVectorIndex;
+  
+  async initialize(): Promise<void> {
+    // Replace SimpleVectorIndex with ScalableVectorIndex
+    this.index = new ScalableVectorIndex(this.config.dimension);
+    
+    // Load persisted index if exists
+    if (await this.indexExists()) {
+      await this.index.load(this.getIndexPath());
+    }
+  }
+}
+```
+
+### 6.2 Add Rate Limiting and Request Throttling
+
+#### 6.2.1 Implement Rate Limiter
+**Issue**: No request throttling could lead to resource exhaustion
+
+```typescript
+// src/utils/rate-limiter.ts
+import { createLogger } from "./logger.js";
+
+const logger = createLogger("RateLimiter");
+
+export interface RateLimiterConfig {
+  windowMs: number;      // Time window in milliseconds
+  maxRequests: number;   // Max requests per window
+  keyGenerator?: (context: any) => string;
+}
+
+export class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+  private config: RateLimiterConfig;
+
+  constructor(config: RateLimiterConfig) {
+    this.config = config;
+  }
+
+  async checkLimit(context: any = {}): Promise<{ allowed: boolean; retryAfter?: number }> {
+    const key = this.config.keyGenerator ? this.config.keyGenerator(context) : 'default';
+    const now = Date.now();
+    const windowStart = now - this.config.windowMs;
+
+    // Get request timestamps for this key
+    let timestamps = this.requests.get(key) || [];
+    
+    // Remove old timestamps outside window
+    timestamps = timestamps.filter(t => t > windowStart);
+    
+    if (timestamps.length >= this.config.maxRequests) {
+      const oldestTimestamp = timestamps[0];
+      const retryAfter = (oldestTimestamp + this.config.windowMs) - now;
+      
+      logger.warn(`Rate limit exceeded for key: ${key}`, {
+        requests: timestamps.length,
+        window: this.config.windowMs,
+        retryAfter
+      });
+      
+      return { allowed: false, retryAfter };
+    }
+
+    // Add current request
+    timestamps.push(now);
+    this.requests.set(key, timestamps);
+    
+    // Cleanup old keys periodically
+    if (this.requests.size > 1000) {
+      this.cleanup();
+    }
+
+    return { allowed: true };
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    const windowStart = now - this.config.windowMs;
+    
+    for (const [key, timestamps] of this.requests.entries()) {
+      const validTimestamps = timestamps.filter(t => t > windowStart);
+      if (validTimestamps.length === 0) {
+        this.requests.delete(key);
+      } else {
+        this.requests.set(key, validTimestamps);
+      }
+    }
+  }
+}
+```
+
+#### 6.2.2 Integrate Rate Limiting in Server
+
+```typescript
+// src/server/index.ts - Add rate limiting to tools
+const memoryRateLimiter = new RateLimiter({
+  windowMs: 60 * 1000,  // 1 minute
+  maxRequests: 100,     // 100 requests per minute
+  keyGenerator: (args) => args.sessionId || 'default'
+});
+
+// Wrap tool handlers with rate limiting
+async function rateLimitedHandler(handler: Function, args: any) {
+  const { allowed, retryAfter } = await memoryRateLimiter.checkLimit(args);
+  
+  if (!allowed) {
+    return {
+      content: [{
+        type: "text" as const,
+        text: `Rate limit exceeded. Please retry after ${Math.ceil(retryAfter / 1000)} seconds.`
+      }],
+      isError: true
+    };
+  }
+  
+  return handler(args);
+}
+```
+
+### 6.3 Complete Missing Features
+
+#### 6.3.1 Git Remote Tracking Implementation
+**Issue**: Missing behind/ahead counts affects branch synchronization
+
+```typescript
+// src/git/monitor.ts - Add remote tracking
+export class GitMonitor {
+  async getRemoteTrackingInfo(): Promise<{ ahead: number; behind: number }> {
+    try {
+      // Get ahead count
+      const ahead = await this.git.raw([
+        'rev-list', 
+        '--count', 
+        '@{upstream}..HEAD'
+      ]);
+      
+      // Get behind count  
+      const behind = await this.git.raw([
+        'rev-list',
+        '--count', 
+        'HEAD..@{upstream}'
+      ]);
+      
+      return {
+        ahead: parseInt(ahead.trim()) || 0,
+        behind: parseInt(behind.trim()) || 0
+      };
+    } catch (error) {
+      logger.debug('No remote tracking branch configured');
+      return { ahead: 0, behind: 0 };
+    }
+  }
+}
+```
+
+#### 6.3.2 Complete Vector Similarity Integration
+
+```typescript
+// src/storage/engine.ts - Complete TODO
+async queryMemories(filters: QueryFilters = {}): Promise<Memory[]> {
+  if (!this.initialized || !this.sqlite) {
+    throw new Error("Storage engine not initialized");
+  }
+
+  logger.debug("Querying memories", filters);
+  
+  // If semantic query provided, use vector search
+  if (filters.semanticQuery && this.vectorStore) {
+    try {
+      // Generate embedding for query
+      const queryEmbedding = await this.embeddingService?.(filters.semanticQuery);
+      
+      if (queryEmbedding) {
+        // Search vector store
+        const vectorResults = await this.vectorStore.search(queryEmbedding, {
+          k: filters.limit || 10,
+          filter: {
+            workspaceId: filters.workspaceId,
+            sessionId: filters.sessionId,
+            gitBranch: filters.gitBranch
+          }
+        });
+        
+        // Get full memories from SQLite
+        const memoryIds = vectorResults.map(r => r.id);
+        return this.sqlite.getMemoriesByIds(memoryIds);
+      }
+    } catch (error) {
+      logger.warn("Vector search failed, falling back to SQL", error);
+    }
+  }
+  
+  // Fallback to SQL query
+  return this.sqlite.queryMemories(filters);
+}
+```
+
+### 6.4 Fix Code Quality Issues
+
+#### 6.4.1 Fix Test Resource Cleanup
+
+```typescript
+// Add to all async close methods
+async close(): Promise<void> {
+  // Clear any timers
+  if (this.cleanupTimer) {
+    clearTimeout(this.cleanupTimer);
+    this.cleanupTimer.unref(); // Prevent blocking process exit
+  }
+  
+  // Rest of cleanup...
+}
+```
+
+#### 6.4.2 Fix Error Messages and Remove Unused Code
+
+```typescript
+// src/intelligence/context-builder.ts:39
+if (options.maxSize !== undefined && options.maxSize < 0) {
+  throw new Error(`Invalid maxSize option: ${options.maxSize} (must be >= 0)`);
+}
+
+// src/storage/vector-store.ts - Remove lines 20-25
+// Remove unused constants or implement them
+```
+
+### 6.5 Testing Requirements
+
+```typescript
+// tests/production/rate-limiter.test.ts
+describe('RateLimiter', () => {
+  it('should limit requests per window', async () => {
+    const limiter = new RateLimiter({
+      windowMs: 1000,
+      maxRequests: 5
+    });
+    
+    // Make 5 requests - all should pass
+    for (let i = 0; i < 5; i++) {
+      const result = await limiter.checkLimit();
+      expect(result.allowed).toBe(true);
+    }
+    
+    // 6th request should fail
+    const result = await limiter.checkLimit();
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfter).toBeGreaterThan(0);
+  });
+});
+
+// tests/production/vector-index.test.ts
+describe('ScalableVectorIndex', () => {
+  it('should handle 100K vectors efficiently', async () => {
+    const index = new ScalableVectorIndex(384);
+    const vectors: number[][] = [];
+    
+    // Add 100K vectors
+    for (let i = 0; i < 100000; i++) {
+      const vector = generateRandomVector(384);
+      vectors.push(vector);
+      await index.add(`vec_${i}`, vector);
+    }
+    
+    // Search should still be fast
+    const start = Date.now();
+    const results = await index.search(vectors[0], 10);
+    const duration = Date.now() - start;
+    
+    expect(duration).toBeLessThan(50); // Much faster than O(n)
+    expect(results[0].id).toBe('vec_0'); // Should find itself
+  });
+});
+```
+
+### Phase 6 Success Criteria
+- [ ] Vector search scales to 100K+ vectors with <50ms latency
+- [ ] Rate limiting prevents resource exhaustion
+- [ ] Git remote tracking fully implemented
+- [ ] Vector similarity integrated in StorageEngine
+- [ ] All code quality issues resolved
+- [ ] No test warnings about resource cleanup
+- [ ] All tests pass with new features
+
+## Phase 7: Performance Optimization (3 days)
+
+### Overview
+Focus on optimizing system performance, reducing latency, and improving resource efficiency.
+
+### 7.1 Query Optimization
+
+#### 7.1.1 Implement Query Planning
+```typescript
+// src/intelligence/query-planner.ts
+export class QueryPlanner {
+  async planQuery(query: string, options: QueryOptions): Promise<QueryPlan> {
+    const plan: QueryPlan = {
+      steps: [],
+      estimatedCost: 0
+    };
+    
+    // Analyze query complexity
+    const hasSemanticSearch = !!query && query.length > 0;
+    const hasFilters = Object.keys(options.filters || {}).length > 0;
+    
+    if (hasSemanticSearch && hasFilters) {
+      // Hybrid search - filter first, then semantic
+      plan.steps.push({
+        type: 'filter',
+        method: 'sql',
+        filters: options.filters
+      });
+      plan.steps.push({
+        type: 'semantic',
+        method: 'vector',
+        query: query
+      });
+    } else if (hasSemanticSearch) {
+      // Pure semantic search
+      plan.steps.push({
+        type: 'semantic',
+        method: 'vector',
+        query: query
+      });
+    } else {
+      // Pure filter search
+      plan.steps.push({
+        type: 'filter',
+        method: 'sql',
+        filters: options.filters
+      });
+    }
+    
+    return plan;
+  }
+}
+```
+
+#### 7.1.2 Implement Batch Processing
+```typescript
+// src/storage/batch-processor.ts
+export class BatchProcessor {
+  private queue: BatchItem[] = [];
+  private processing = false;
+  
+  async addToQueue(item: BatchItem): Promise<void> {
+    this.queue.push(item);
+    
+    if (!this.processing) {
+      this.processBatch();
+    }
+  }
+  
+  private async processBatch(): Promise<void> {
+    this.processing = true;
+    
+    while (this.queue.length > 0) {
+      const batch = this.queue.splice(0, 100); // Process 100 at a time
+      
+      try {
+        await this.processBatchItems(batch);
+      } catch (error) {
+        logger.error('Batch processing failed', error);
+        // Re-queue failed items
+        this.queue.unshift(...batch);
+      }
+    }
+    
+    this.processing = false;
+  }
+}
+```
+
+### 7.2 Caching Improvements
+
+#### 7.2.1 Implement Multi-Level Cache
+```typescript
+// src/utils/multi-level-cache.ts
+export class MultiLevelCache {
+  private l1Cache: Map<string, CacheEntry> = new Map(); // In-memory
+  private l2Cache?: RedisCache; // Optional Redis
+  private l3Cache?: DiskCache; // Optional disk
+  
+  async get(key: string): Promise<any> {
+    // Check L1
+    const l1Result = this.l1Cache.get(key);
+    if (l1Result && !this.isExpired(l1Result)) {
+      return l1Result.value;
+    }
+    
+    // Check L2
+    if (this.l2Cache) {
+      const l2Result = await this.l2Cache.get(key);
+      if (l2Result) {
+        this.l1Cache.set(key, l2Result); // Promote to L1
+        return l2Result.value;
+      }
+    }
+    
+    // Check L3
+    if (this.l3Cache) {
+      const l3Result = await this.l3Cache.get(key);
+      if (l3Result) {
+        // Promote to L1 and L2
+        this.l1Cache.set(key, l3Result);
+        await this.l2Cache?.set(key, l3Result);
+        return l3Result.value;
+      }
+    }
+    
+    return null;
+  }
+}
+```
+
+### 7.3 Resource Optimization
+
+#### 7.3.1 Implement Connection Pooling
+```typescript
+// src/utils/connection-pool.ts
+export class ConnectionPool {
+  private pool: Database[] = [];
+  private available: Database[] = [];
+  private maxSize: number;
+  
+  constructor(config: PoolConfig) {
+    this.maxSize = config.maxSize || 10;
+  }
+  
+  async acquire(): Promise<Database> {
+    if (this.available.length > 0) {
+      return this.available.pop()!;
+    }
+    
+    if (this.pool.length < this.maxSize) {
+      const conn = await this.createConnection();
+      this.pool.push(conn);
+      return conn;
+    }
+    
+    // Wait for available connection
+    return this.waitForConnection();
+  }
+  
+  release(conn: Database): void {
+    this.available.push(conn);
+  }
+}
+```
+
+### 7.4 Memory Management
+
+#### 7.4.1 Implement Memory Pressure Handling
+```typescript
+// src/utils/memory-manager.ts
+export class MemoryManager {
+  private highWaterMark = 0.8; // 80% of heap
+  private lowWaterMark = 0.6;  // 60% of heap
+  
+  startMonitoring(): void {
+    setInterval(() => {
+      const usage = process.memoryUsage();
+      const heapUsed = usage.heapUsed / usage.heapTotal;
+      
+      if (heapUsed > this.highWaterMark) {
+        this.handleHighMemoryPressure();
+      }
+    }, 5000).unref();
+  }
+  
+  private handleHighMemoryPressure(): void {
+    logger.warn('High memory pressure detected');
+    
+    // Clear caches
+    global.gc?.(); // If --expose-gc flag is used
+    
+    // Emit event for other components
+    this.emit('memory-pressure', { level: 'high' });
+  }
+}
+```
+
+### 7.5 Performance Testing
+
+```typescript
+// tests/performance/load-test.ts
+describe('Performance Tests', () => {
+  it('should handle 1000 concurrent requests', async () => {
+    const requests = [];
+    
+    for (let i = 0; i < 1000; i++) {
+      requests.push(
+        intelligence.retrieveMemories(`query ${i}`, { limit: 5 })
+      );
+    }
+    
+    const start = Date.now();
+    await Promise.all(requests);
+    const duration = Date.now() - start;
+    
+    expect(duration).toBeLessThan(5000); // All within 5 seconds
+  });
+  
+  it('should maintain <200ms p95 latency', async () => {
+    const latencies: number[] = [];
+    
+    for (let i = 0; i < 100; i++) {
+      const start = Date.now();
+      await intelligence.retrieveMemories('test query');
+      latencies.push(Date.now() - start);
+    }
+    
+    latencies.sort((a, b) => a - b);
+    const p95 = latencies[Math.floor(latencies.length * 0.95)];
+    
+    expect(p95).toBeLessThan(200);
+  });
+});
+```
+
+### Phase 7 Success Criteria
+- [ ] P95 query latency < 200ms under normal load
+- [ ] System handles 1000+ concurrent requests
+- [ ] Memory usage remains stable under load
+- [ ] Cache hit rate > 80% for repeated queries
+- [ ] Batch processing reduces database load by 50%
+- [ ] Connection pooling eliminates connection overhead
+
+## Phase 8: Release Preparation (3 days)
+
+### Overview
+Prepare for production release with documentation, deployment scripts, monitoring, and operational tooling.
+
+### 8.1 Documentation
+
+#### 8.1.1 API Documentation
+```typescript
+// docs/api.md
+# Claude Memory MCP API Reference
+
+## Tools
+
+### capture-memory
+Captures a memory event for persistent storage.
+
+**Input Schema:**
+- `eventType` (string, required): Type of event being captured
+- `content` (string, required): Memory content
+- `metadata` (object, optional): Additional metadata
+
+**Example:**
+```json
+{
+  "eventType": "code_write",
+  "content": "Implemented user authentication",
+  "metadata": {
+    "file": "auth.ts",
+    "lines": 150
+  }
+}
+```
+
+### retrieve-memories
+Retrieves relevant memories based on semantic search.
+
+**Input Schema:**
+- `query` (string, required): Semantic search query
+- `limit` (number, optional): Maximum results (default: 10)
+- `filters` (object, optional): Additional filters
+
+**Rate Limits:**
+- 100 requests per minute per session
+- 1000 requests per hour per workspace
+```
+
+#### 8.1.2 Deployment Guide
+```markdown
+# Deployment Guide
+
+## Prerequisites
+- Node.js 18+
+- SQLite3
+- 2GB RAM minimum
+- 10GB disk space
+
+## Production Configuration
+
+### Environment Variables
+```bash
+NODE_ENV=production
+LOG_LEVEL=info
+STORAGE_PATH=/var/lib/claude-memory
+VECTOR_INDEX_PATH=/var/lib/claude-memory/vectors
+MAX_MEMORY_SIZE=1GB
+RATE_LIMIT_WINDOW=60000
+RATE_LIMIT_MAX_REQUESTS=100
+```
+
+### Systemd Service
+```ini
+[Unit]
+Description=Claude Memory MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=claude-memory
+WorkingDirectory=/opt/claude-memory
+ExecStart=/usr/bin/node dist/server/index.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+```
+
+### 8.2 Monitoring and Observability
+
+#### 8.2.1 Prometheus Metrics
+```typescript
+// src/monitoring/metrics.ts
+import { Registry, Counter, Histogram, Gauge } from 'prom-client';
+
+export class MetricsCollector {
+  private registry = new Registry();
+  
+  // Counters
+  private memoryCaptures = new Counter({
+    name: 'memory_captures_total',
+    help: 'Total number of memory captures',
+    labelNames: ['event_type', 'status']
+  });
+  
+  // Histograms
+  private queryLatency = new Histogram({
+    name: 'query_latency_seconds',
+    help: 'Query latency in seconds',
+    labelNames: ['type'],
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5]
+  });
+  
+  // Gauges
+  private vectorIndexSize = new Gauge({
+    name: 'vector_index_size',
+    help: 'Number of vectors in index'
+  });
+  
+  constructor() {
+    this.registry.registerMetric(this.memoryCaptures);
+    this.registry.registerMetric(this.queryLatency);
+    this.registry.registerMetric(this.vectorIndexSize);
+  }
+  
+  recordMemoryCapture(eventType: string, success: boolean): void {
+    this.memoryCaptures.inc({
+      event_type: eventType,
+      status: success ? 'success' : 'failure'
+    });
+  }
+  
+  recordQueryLatency(type: string, duration: number): void {
+    this.queryLatency.observe({ type }, duration / 1000);
+  }
+  
+  updateVectorIndexSize(size: number): void {
+    this.vectorIndexSize.set(size);
+  }
+  
+  getMetrics(): string {
+    return this.registry.metrics();
+  }
+}
+```
+
+#### 8.2.2 Health Check Endpoint
+```typescript
+// src/server/health.ts
+export function registerHealthEndpoint(server: McpServer): void {
+  server.registerTool(
+    'health-detailed',
+    {
+      title: 'Detailed Health Check',
+      description: 'Comprehensive health check with subsystem details'
+    },
+    async () => {
+      const report = await healthChecker.checkHealth();
+      
+      // Add additional checks
+      const extendedReport = {
+        ...report,
+        performance: {
+          queryLatencyP95: metrics.getQueryLatencyP95(),
+          cacheHitRate: cache.getHitRate(),
+          vectorIndexSize: vectorStore.size()
+        },
+        resources: {
+          memoryUsage: process.memoryUsage(),
+          cpuUsage: process.cpuUsage(),
+          openConnections: connectionPool.getActiveCount()
+        }
+      };
+      
+      return {
+        content: [{
+          type: "text" as const,
+          text: JSON.stringify(extendedReport, null, 2)
+        }]
+      };
+    }
+  );
+}
+```
+
+### 8.3 Security Hardening
+
+#### 8.3.1 Input Validation Enhancement
+```typescript
+// src/utils/validator.ts
+import { z } from 'zod';
+
+export const MemoryInputSchema = z.object({
+  eventType: z.string().min(1).max(50).regex(/^[a-z_]+$/),
+  content: z.string().min(1).max(1_000_000), // 1MB max
+  metadata: z.record(z.unknown()).optional().refine(
+    (meta) => JSON.stringify(meta).length < 10_000,
+    { message: "Metadata too large" }
+  )
+});
+
+export const QueryInputSchema = z.object({
+  query: z.string().min(1).max(1000),
+  limit: z.number().int().min(1).max(100).optional(),
+  filters: z.record(z.union([z.string(), z.number(), z.boolean()])).optional()
+});
+```
+
+#### 8.3.2 Secrets Management
+```typescript
+// src/utils/secrets.ts
+export class SecretsManager {
+  private secrets: Map<string, string> = new Map();
+  
+  async loadFromEnv(): Promise<void> {
+    // Load from environment with validation
+    const requiredSecrets = ['JWT_SECRET', 'ENCRYPTION_KEY'];
+    
+    for (const key of requiredSecrets) {
+      const value = process.env[key];
+      if (!value) {
+        throw new Error(`Missing required secret: ${key}`);
+      }
+      this.secrets.set(key, value);
+    }
+  }
+  
+  get(key: string): string {
+    const value = this.secrets.get(key);
+    if (!value) {
+      throw new Error(`Secret not found: ${key}`);
+    }
+    return value;
+  }
+}
+```
+
+### 8.4 Migration Scripts
+
+#### 8.4.1 Data Migration
+```typescript
+// scripts/migrate-vector-index.ts
+async function migrateToScalableIndex(): Promise<void> {
+  console.log('Starting vector index migration...');
+  
+  // Load old index
+  const oldStore = new VectorStore({ provider: 'local' });
+  await oldStore.initialize();
+  
+  // Create new index
+  const newIndex = new ScalableVectorIndex(384);
+  
+  // Migrate vectors in batches
+  const batchSize = 1000;
+  let offset = 0;
+  
+  while (true) {
+    const vectors = await oldStore.getAllVectors(offset, batchSize);
+    if (vectors.length === 0) break;
+    
+    for (const vector of vectors) {
+      await newIndex.add(vector.id, vector.embedding);
+    }
+    
+    offset += batchSize;
+    console.log(`Migrated ${offset} vectors...`);
+  }
+  
+  // Save new index
+  await newIndex.save('./data/vector-index.hnsw');
+  console.log('Migration complete!');
+}
+```
+
+### 8.5 Release Checklist
+
+```markdown
+# Release Checklist
+
+## Pre-Release
+- [ ] All tests passing (100% of 400+ tests)
+- [ ] Performance benchmarks meet requirements
+- [ ] Security scan completed (no high/critical vulnerabilities)
+- [ ] Documentation updated
+- [ ] Migration scripts tested
+- [ ] Backup procedures documented
+
+## Release Process
+- [ ] Tag release in git: `git tag -a v1.0.0 -m "Release 1.0.0"`
+- [ ] Build production artifacts: `npm run build:prod`
+- [ ] Run integration tests in staging
+- [ ] Deploy to production with canary rollout
+- [ ] Monitor metrics for 24 hours
+- [ ] Update status page
+
+## Post-Release
+- [ ] Announce release to users
+- [ ] Monitor error rates and performance
+- [ ] Collect feedback
+- [ ] Plan next iteration
+```
+
+### Phase 8 Success Criteria
+- [ ] Complete API documentation with examples
+- [ ] Deployment guide covers all production scenarios
+- [ ] Monitoring exposes all key metrics
+- [ ] Security hardening passes penetration testing
+- [ ] Migration scripts handle all edge cases
+- [ ] Release process is fully automated
+- [ ] Zero critical issues in production for 48 hours

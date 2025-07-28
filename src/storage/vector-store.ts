@@ -2,6 +2,8 @@ import { createLogger } from "../utils/logger.js";
 import path from "path";
 import fs from "fs/promises";
 import { EmbeddingGenerator } from "../intelligence/embeddings.js";
+import { ScalableVectorIndexImpl } from "../intelligence/vector-index.js";
+import type { VectorDocument, SearchOptions as IndexSearchOptions } from "../intelligence/vector-index.js";
 
 const logger = createLogger("VectorStore");
 
@@ -292,6 +294,7 @@ export interface VectorConfig {
     toDimension: number;
   };
   crossEncoder?: CrossEncoder;
+  useScalableIndex?: boolean;
 }
 
 // Type definitions for better type safety
@@ -433,6 +436,7 @@ export class VectorStore {
   private similarityCalculator: SimilarityCalculator;
   private filterStatsTracker: FilterStatsTracker;
   private precomputedEmbeddings: Map<string, number[]> = new Map();
+  private scalableIndex?: ScalableVectorIndexImpl;
 
   constructor(config: VectorConfig) {
     this.config = config;
@@ -444,6 +448,11 @@ export class VectorStore {
     this.filterCache = new FilterCache(config.filterCacheSize || DEFAULT_FILTER_CACHE_SIZE);
     this.similarityCalculator = new SimilarityCalculator(config.metric || 'cosine');
     this.filterStatsTracker = new FilterStatsTracker();
+    
+    // Initialize scalable index if enabled
+    if (config.useScalableIndex) {
+      this.scalableIndex = new ScalableVectorIndexImpl();
+    }
   }
 
   /**
@@ -475,6 +484,20 @@ export class VectorStore {
           } else {
             this.vectors = new Map(Object.entries(parsed));
             logger.info(`Loaded ${this.vectors.size} vectors from disk`);
+            
+            // Load vectors into scalable index if enabled
+            if (this.scalableIndex && this.vectors.size > 0) {
+              const documents: VectorDocument[] = [];
+              for (const [id, data] of this.vectors.entries()) {
+                documents.push({
+                  id,
+                  vector: data.vector,
+                  metadata: { ...data.metadata, id, workspaceId: String(data.metadata.workspaceId || 'default'), timestamp: new Date() }
+                });
+              }
+              await this.scalableIndex.addBatch(documents);
+              logger.info(`Loaded ${documents.length} vectors into scalable index`);
+            }
           }
         } catch (error) {
           // File doesn't exist yet, which is fine
@@ -535,6 +558,16 @@ export class VectorStore {
     // Store vector
     this.vectors.set(id, { vector, metadata });
     
+    // Also add to scalable index if enabled
+    if (this.scalableIndex) {
+      const doc: VectorDocument = {
+        id,
+        vector,
+        metadata: { ...metadata, id, workspaceId: String(metadata.workspaceId || 'default'), timestamp: new Date() }
+      };
+      await this.scalableIndex.add(doc);
+    }
+    
     // Invalidate filter cache
     this.filterCache.clear();
     
@@ -589,6 +622,44 @@ export class VectorStore {
       throw new Error(`Query vector dimension mismatch. Expected ${this.dimension}, got ${queryVector.length}`);
     }
 
+    // Use scalable index if available
+    if (this.scalableIndex) {
+      const indexOptions: IndexSearchOptions = {
+        limit: options.k,
+        threshold: options.threshold,
+        filter: options.filter
+      };
+      
+      const searchResults = await this.scalableIndex.search(queryVector, indexOptions);
+      const results: VectorResult[] = [];
+      
+      for (const result of searchResults) {
+        // Apply function filter if provided
+        if (options.filterFn && !options.filterFn(result.document.metadata as Metadata)) {
+          continue;
+        }
+        
+        results.push({
+          id: result.document.id,
+          vector: result.document.vector,
+          metadata: result.document.metadata as Metadata,
+          score: result.score
+        });
+      }
+      
+      // Track filter usage statistics
+      if (this.config.trackFilterStats && options.filter) {
+        this.filterStatsTracker.track(options.filter);
+      }
+      
+      // Track metrics
+      const latency = Date.now() - startTime;
+      this.metricsTracker.trackSearchOperation(latency);
+      
+      return results.slice(0, options.k);
+    }
+
+    // Fallback to original implementation
     // Check filter cache if enabled
     let candidateIds: string[] | undefined;
     
@@ -674,6 +745,11 @@ export class VectorStore {
 
     const existed = this.vectors.delete(id);
     
+    // Also remove from scalable index if enabled
+    if (this.scalableIndex) {
+      await this.scalableIndex.remove(id);
+    }
+    
     if (existed && this.path) {
       await this.persist();
     }
@@ -687,6 +763,11 @@ export class VectorStore {
     }
 
     this.vectors.clear();
+    
+    // Also clear scalable index if enabled
+    if (this.scalableIndex) {
+      await this.scalableIndex.clear();
+    }
     
     if (this.path) {
       await this.persist();
@@ -877,6 +958,16 @@ export class VectorStore {
           this.vectors.set(id, { vector: v.vector, metadata: v.metadata });
           chunkIds.push(id);
           stored.push(id);
+          
+          // Also add to scalable index if enabled
+          if (this.scalableIndex) {
+            const doc: VectorDocument = {
+              id,
+              vector: v.vector,
+              metadata: { ...v.metadata, id, workspaceId: String(v.metadata.workspaceId || 'default'), timestamp: new Date() }
+            };
+            await this.scalableIndex.add(doc);
+          }
           
           // Report progress
           if (options?.onProgress) {

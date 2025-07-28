@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "@jest/globals";
 import { SimpleVectorIndex, createVectorIndex } from "../../src/intelligence/vector-index.js";
+import type { ScalableVectorIndex, VectorDocument, SearchOptions, SearchResult } from '../../src/intelligence/vector-index.js';
 
 describe('SimpleVectorIndex', () => {
   let index: SimpleVectorIndex;
@@ -172,5 +173,157 @@ describe('createVectorIndex', () => {
 
   it('should throw error for unknown types', () => {
     expect(() => createVectorIndex('unknown' as any)).toThrow('Unknown vector index type: unknown');
+  });
+});
+
+describe('ScalableVectorIndex Interface', () => {
+  describe('Type Definitions', () => {
+    it('should define VectorDocument with required properties', () => {
+      // Given: A valid vector document
+      const doc: VectorDocument = {
+        id: 'test-id',
+        vector: [0.1, 0.2, 0.3],
+        metadata: {
+          id: 'test-id',
+          workspaceId: 'workspace-1',
+          timestamp: new Date(),
+          customField: 'value'
+        }
+      };
+
+      // Then: It should have all required properties
+      expect(doc.id).toBeDefined();
+      expect(doc.vector).toBeDefined();
+      expect(doc.metadata).toBeDefined();
+      expect(doc.metadata.workspaceId).toBeDefined();
+      expect(doc.metadata.timestamp).toBeDefined();
+    });
+
+    it('should define SearchOptions with optional properties', () => {
+      // Given: Various search options
+      const minimalOptions: SearchOptions = {};
+      const fullOptions: SearchOptions = {
+        limit: 10,
+        threshold: 0.8,
+        filter: { workspaceId: 'workspace-1' }
+      };
+
+      // Then: Both should be valid
+      expect(minimalOptions).toBeDefined();
+      expect(fullOptions.limit).toBe(10);
+      expect(fullOptions.threshold).toBe(0.8);
+      expect(fullOptions.filter).toBeDefined();
+    });
+
+    it('should define SearchResult with document and score', () => {
+      // Given: A search result
+      const result: SearchResult = {
+        document: {
+          id: 'test-id',
+          vector: [0.1, 0.2, 0.3],
+          metadata: {
+            id: 'test-id',
+            workspaceId: 'workspace-1',
+            timestamp: new Date()
+          }
+        },
+        score: 0.95
+      };
+
+      // Then: It should have required properties
+      expect(result.document).toBeDefined();
+      expect(result.score).toBeDefined();
+      expect(typeof result.score).toBe('number');
+    });
+  });
+
+  describe('Interface Contract', () => {
+    // Mock implementation for testing interface contract
+    class MockScalableVectorIndex implements ScalableVectorIndex {
+      async add(_document: VectorDocument): Promise<void> {
+        throw new Error('Not implemented');
+      }
+
+      async addBatch(_documents: VectorDocument[]): Promise<void> {
+        throw new Error('Not implemented');
+      }
+
+      async search(_query: number[], _options?: SearchOptions): Promise<SearchResult[]> {
+        throw new Error('Not implemented');
+      }
+
+      async remove(_id: string): Promise<void> {
+        throw new Error('Not implemented');
+      }
+
+      async clear(): Promise<void> {
+        throw new Error('Not implemented');
+      }
+
+      async size(): Promise<number> {
+        throw new Error('Not implemented');
+      }
+
+      async has(_id: string): Promise<boolean> {
+        throw new Error('Not implemented');
+      }
+
+      async get(_id: string): Promise<VectorDocument | null> {
+        throw new Error('Not implemented');
+      }
+
+      async persist(): Promise<void> {
+        throw new Error('Not implemented');
+      }
+
+      async load(): Promise<void> {
+        throw new Error('Not implemented');
+      }
+    }
+
+    it('should implement all required methods', () => {
+      // Given: An implementation of ScalableVectorIndex
+      const index: ScalableVectorIndex = new MockScalableVectorIndex();
+
+      // Then: All methods should be defined
+      expect(index.add).toBeDefined();
+      expect(index.addBatch).toBeDefined();
+      expect(index.search).toBeDefined();
+      expect(index.remove).toBeDefined();
+      expect(index.clear).toBeDefined();
+      expect(index.size).toBeDefined();
+      expect(index.has).toBeDefined();
+      expect(index.get).toBeDefined();
+      expect(index.persist).toBeDefined();
+      expect(index.load).toBeDefined();
+    });
+
+    it('should have methods that return promises', async () => {
+      // Given: An implementation of ScalableVectorIndex
+      const index = new MockScalableVectorIndex();
+
+      // When: Calling methods (expecting them to throw)
+      // Then: They should return promises
+      await expect(index.add({ id: 'test', vector: [], metadata: { id: 'test', workspaceId: 'ws', timestamp: new Date() } }))
+        .rejects.toThrow('Not implemented');
+      await expect(index.addBatch([]))
+        .rejects.toThrow('Not implemented');
+      await expect(index.search([]))
+        .rejects.toThrow('Not implemented');
+      await expect(index.remove('test'))
+        .rejects.toThrow('Not implemented');
+      await expect(index.clear())
+        .rejects.toThrow('Not implemented');
+      await expect(index.size())
+        .rejects.toThrow('Not implemented');
+      await expect(index.has('test'))
+        .rejects.toThrow('Not implemented');
+      await expect(index.get('test'))
+        .rejects.toThrow('Not implemented');
+      await expect(index.persist())
+        .rejects.toThrow('Not implemented');
+      await expect(index.load())
+        .rejects.toThrow('Not implemented');
+    });
   });
 });

@@ -62,7 +62,7 @@ export class HealthChecker {
     const start = Date.now();
 
     const components = {
-      storage: this.checkStorage(),
+      storage: await this.checkStorage(),
       hooks: await this.checkHooks(),
       git: await this.checkGit(),
       intelligence: await this.checkIntelligence()
@@ -98,7 +98,7 @@ export class HealthChecker {
   /**
    * Check storage subsystem health
    */
-  checkStorage(): ComponentHealth {
+  async checkStorage(): Promise<ComponentHealth> {
     if (!this.storage) {
       return {
         status: HealthStatus.UNHEALTHY,
@@ -110,7 +110,7 @@ export class HealthChecker {
       const start = Date.now();
       
       // Test basic storage operations
-      const stats = this.storage.getStatistics();
+      const stats = await this.storage.getStatistics();
       const latency = Date.now() - start;
       
       // Check if storage is responsive

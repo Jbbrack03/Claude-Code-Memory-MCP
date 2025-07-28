@@ -232,7 +232,7 @@ function registerTools() {
         });
         
         // Then build context from them
-        const context = intelligence.buildContext(memories);
+        const context = await intelligence.buildContext(memories);
         
         return {
           content: [{

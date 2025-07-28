@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-07-28
+
+### Added
+- **Scalable Vector Index Integration**: Integrated hnswlib-node based ScalableVectorIndexImpl for O(log n) search performance
+  - Added `useScalableIndex` configuration option to VectorStore
+  - Seamless fallback to SimpleVectorIndex when disabled
+  - Full compatibility with existing vector operations
+- **Rate Limiting System**: Comprehensive RateLimiter implementation with production-ready features
+  - Sliding window and fixed window algorithms
+  - TTL support with automatic cleanup
+  - Per-identifier tracking with configurable namespaces
+  - State inspection and manual reset capabilities
+- **Git Remote Tracking**: Added `getRemoteTrackingInfo()` method to GitMonitor
+  - Reports ahead/behind commit counts for current branch
+  - Handles cases with no remote tracking gracefully
+  - Useful for synchronization status monitoring
+
+### Fixed
+- **All Code Quality Issues**: Fixed all ESLint and TypeScript errors
+  - Replaced unsafe `any` types with proper type definitions
+  - Added proper error handling for file system operations
+  - Fixed async method signatures requiring ESLint suppressions
+  - Improved type safety with SerializedMetadata interface
+  - Fixed metadata type incompatibilities in VectorStore
+  - Corrected WindowEntry type to make count required
+- **Timer Resource Cleanup**: Added proper cleanup to prevent test hangs
+  - Added `close()` method to CircuitBreaker for timer cleanup
+  - Updated HookSystem to call `circuitBreaker.close()` on shutdown
+  - Ensures clean process exit in tests and production
+- **Health Checker Async Issues**: Fixed missing await in storage health checks
+
+### Changed
+- **Test Suite Growth**: Increased from 433 to 472 tests (all passing)
+- **Documentation**: Updated CLAUDE.md with current implementation status
+- **Type Definitions**: Added hnswlib-node type definitions
+
+### Development
+- Phase 6 Production Hardening partially complete
+- 100% test pass rate maintained
+- Zero ESLint errors or warnings
+- Zero TypeScript compilation errors
+
 ## [0.6.1] - 2025-07-28
 
 ### Fixed

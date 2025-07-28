@@ -284,6 +284,28 @@ export class GitMonitor extends EventEmitter {
     this.removeAllListeners();
   }
 
+  async getRemoteTrackingInfo(): Promise<{ ahead: number; behind: number }> {
+    try {
+      // Get ahead count
+      const { stdout: aheadOutput } = await execAsync('git rev-list --count @{upstream}..HEAD', {
+        cwd: this.repositoryRoot || this.config.cwd
+      });
+      
+      // Get behind count  
+      const { stdout: behindOutput } = await execAsync('git rev-list --count HEAD..@{upstream}', {
+        cwd: this.repositoryRoot || this.config.cwd
+      });
+      
+      return {
+        ahead: parseInt(aheadOutput.trim()) || 0,
+        behind: parseInt(behindOutput.trim()) || 0
+      };
+    } catch (error) {
+      logger.debug('No remote tracking branch configured');
+      return { ahead: 0, behind: 0 };
+    }
+  }
+
   // Type-safe event emitter methods
   on<K extends keyof GitMonitorEvents>(event: K, listener: GitMonitorEvents[K]): this {
     return super.on(event, listener);

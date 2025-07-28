@@ -191,6 +191,10 @@ export class HookSystem {
       this.executor.cleanup();
     }
     
+    if (this.circuitBreaker) {
+      this.circuitBreaker.close();
+    }
+    
     this.initialized = false;
     logger.info("Hook system closed");
   }

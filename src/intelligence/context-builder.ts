@@ -36,7 +36,7 @@ export class ContextBuilder {
 
     // Validate maxSize
     if (options.maxSize !== undefined && options.maxSize < 0) {
-      throw new Error('Invalid format option: invalid');
+      throw new Error(`Invalid maxSize option: ${options.maxSize} (must be >= 0)`);
     }
 
     this.options = {

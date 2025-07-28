@@ -14,9 +14,9 @@ npm start                # Run compiled server (node dist/server/index.js)
 
 ### Testing
 ```bash
-npm test                 # Run all tests (120 tests as of 2025-07-25)
+npm test                 # Run all tests (472 tests as of 2025-07-28)
 npm run test:watch       # Run tests in watch mode
-npm run test:coverage    # Run tests with coverage report (78.88% coverage)
+npm run test:coverage    # Run tests with coverage report
 npx jest path/to/file.test.ts    # Run specific test file
 npx jest -t "test name"          # Run tests matching pattern
 
@@ -97,38 +97,36 @@ The project follows TDD with an 8-phase implementation plan (see IMPLEMENTATION.
 - ✅ Phase 3: Git Integration (COMPLETE - fully implemented with tests)
 - ✅ Phase 4: Intelligence Layer (COMPLETE - fully implemented with tests)
 - 🔲 Phase 5: MCP Server Integration
-- 🔲 Phase 6: Production Hardening
+- 🟡 Phase 6: Production Hardening (IN PROGRESS)
 - 🔲 Phase 7: Performance Optimization
 - 🔲 Phase 8: Release Preparation
 
-### Current Status (2025-07-27):
+### Current Status (2025-07-28):
 - **Completed**: Phases 1, 2, 3, and 4 with full test coverage
-- **Phase 4 Intelligence Layer**: ✅ COMPLETE
-  - ✅ EmbeddingGenerator: Complete with 97% coverage
-  - ✅ VectorStore: Enhanced with similarity search, filtering, and batch operations
-  - ✅ ContextBuilder: Implemented with comprehensive formatting and deduplication
-  - ✅ IntelligenceLayer: Full implementation with vector search, SQL fallback, and caching
-  - ✅ Integration tests: Written for complete memory lifecycle
-- **Test Suite**: 220/227 tests passing (97% pass rate)
+- **Phase 6 Production Hardening**: 🟡 IN PROGRESS
+  - ✅ Scalable Vector Index: Integrated ScalableVectorIndexImpl with hnswlib-node
+  - ✅ Rate Limiting: Implemented RateLimiter with sliding/fixed window modes
+  - ✅ Git Remote Tracking: Added getRemoteTrackingInfo() to monitor branch sync
+  - ✅ Code Quality Fixes: Fixed error messages, added timer cleanup
+- **Test Suite**: 472 tests passing (100% pass rate)
 - **Storage Engine**: Fully implemented with SQLite, Vector Store, and File Store
 - **Hook System**: Complete with executor, circuit breaker, and security sandboxing
-- **Git Integration**: Complete with monitor, validator, and integration tests
-- **Vector Store**: Enhanced with cosine similarity, metadata filtering, batch operations
+- **Git Integration**: Complete with monitor, validator, integration tests, and remote tracking
+- **Vector Store**: Enhanced with scalable index option, cosine similarity, metadata filtering
 - **Intelligence Features**: Semantic search, query caching, reranking, context building
+- **Rate Limiting**: Production-ready rate limiter with TTL support and cleanup
 - **Security Enhancements**: Advanced command injection prevention with comprehensive parsing
 - **Documentation**: Hook configuration guide added at `docs/hook-configuration.md`
-- **Integration Tests**: 14 comprehensive integration tests covering all subsystems
+- **Integration Tests**: Comprehensive integration tests covering all subsystems
 
-### Recent Improvements (2025-07-27):
-- Completed IntelligenceLayer implementation with actual retrieval logic
-- Implemented ContextBuilder for formatting retrieved memories
-- Added query caching for improved performance
-- Implemented SQL fallback when vector store is unavailable
-- Created comprehensive integration tests for memory lifecycle
-- Added support for workspace and git branch isolation in searches
-- Fixed TypeScript errors in layer.test.ts unit tests (all 43 tests passing)
-- Implemented SimpleVectorIndex for performance optimization
-- Created IndexedVectorStore adapter for integration with existing infrastructure
+### Recent Improvements (2025-07-28):
+- Implemented ScalableVectorIndexImpl integration with hnswlib-node for O(log n) search
+- Created comprehensive RateLimiter with sliding/fixed window modes and TTL support
+- Added Git remote tracking functionality with ahead/behind commit counts
+- Fixed code quality issues: improved error messages and added timer cleanup
+- Increased test suite from 433 to 472 tests (all passing)
+- Enhanced CircuitBreaker with proper resource cleanup on shutdown
+- Updated HookSystem to call CircuitBreaker.close() for clean exits
 
 ## Testing Approach
 

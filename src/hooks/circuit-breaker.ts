@@ -218,4 +218,13 @@ export class CircuitBreaker {
 
     this.timers.set(operationName, timer);
   }
+
+  close(): void {
+    // Clear all timers to prevent blocking process exit
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
+    this.circuits.clear();
+  }
 }
