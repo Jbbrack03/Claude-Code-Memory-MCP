@@ -84,16 +84,16 @@ export class FileStore {
       const metadataPath = path.join(this.path, 'metadata', `${id}.json`);
       try {
         const metadataStr = await fs.readFile(metadataPath, 'utf-8');
-        const metadata = JSON.parse(metadataStr);
+        const metadata = JSON.parse(metadataStr) as { checksum: string };
         const checksum = crypto.createHash('sha256').update(content).digest('hex');
         
         if (checksum !== metadata.checksum) {
           logger.error(`Checksum mismatch for file ${id}`);
           throw new Error(`File integrity check failed for ${id}`);
         }
-      } catch (error: any) {
+      } catch (error) {
         // Re-throw integrity errors
-        if (error.message?.includes('File integrity check failed')) {
+        if (error instanceof Error && error.message?.includes('File integrity check failed')) {
           throw error;
         }
         // Metadata file might not exist for older entries
@@ -101,8 +101,9 @@ export class FileStore {
       }
       
       return content;
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') {
         return null;
       }
       throw error;
@@ -123,16 +124,16 @@ export class FileStore {
     try {
       await fs.unlink(contentPath);
       deleted = true;
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
         throw error;
       }
     }
     
     try {
       await fs.unlink(metadataPath);
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
         throw error;
       }
     }
@@ -184,7 +185,7 @@ export class FileStore {
     return { count, totalSize };
   }
 
-  async close(): Promise<void> {
+  close(): void {
     this.initialized = false;
     logger.info("File store closed");
   }
@@ -195,7 +196,11 @@ export class FileStore {
       throw new Error(`Invalid size format: ${sizeStr}`);
     }
     
-    const value = parseInt(match[1]!);
+    const firstMatch = match[1];
+    if (!firstMatch) {
+      throw new Error('Invalid size format');
+    }
+    const value = parseInt(firstMatch);
     const unit = match[2]?.toUpperCase();
     
     switch (unit) {

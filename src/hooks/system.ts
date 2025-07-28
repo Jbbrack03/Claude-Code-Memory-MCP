@@ -72,7 +72,7 @@ export class HookSystem {
     }
   }
 
-  async initialize(): Promise<void> {
+  initialize(): void {
     logger.info("Initializing hook system...");
     
     // Initialize executor with sandbox config
@@ -131,8 +131,8 @@ export class HookSystem {
           const execResult = await this.executor.execute(hook.command, { context: env });
           
           // Parse output if needed
-          let parsed;
-          let parseError;
+          let parsed: unknown;
+          let parseError: string | undefined;
           if (hook.outputFormat === 'json' && execResult.stdout) {
             try {
               parsed = JSON.parse(execResult.stdout.trim());
@@ -184,11 +184,11 @@ export class HookSystem {
     }
   }
 
-  async close(): Promise<void> {
+  close(): void {
     logger.info("Closing hook system...");
     
     if (this.executor) {
-      await this.executor.cleanup();
+      this.executor.cleanup();
     }
     
     this.initialized = false;

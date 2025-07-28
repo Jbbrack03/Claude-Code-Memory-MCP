@@ -75,7 +75,7 @@ describe('IntelligenceLayer - TDD Red Phase Tests', () => {
         close: jest.fn(() => Promise.resolve())
       };
       const mockStorageEngine = {
-        getVectorStore: jest.fn(() => Promise.resolve(mockVectorStore))
+        getVectorStore: jest.fn(() => mockVectorStore)
       };
 
       // When: Creating layer with storage engine
@@ -310,7 +310,7 @@ describe('IntelligenceLayer - TDD Red Phase Tests', () => {
         close: jest.fn()
       };
       const mockStorageEngine = {
-        getVectorStore: jest.fn(() => Promise.resolve(mockVectorStore))
+        getVectorStore: jest.fn(() => mockVectorStore)
       };
       const mockEmbeddingGenerator = {
         initialize: jest.fn(() => Promise.resolve()),

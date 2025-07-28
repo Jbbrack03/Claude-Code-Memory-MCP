@@ -54,13 +54,14 @@ export class EmbeddingGenerator {
     // Load the model
     this.pipeline = await pipeline(
       'feature-extraction',
-      this.config.model!,
+      this.config.model || DEFAULT_MODEL,
       { device: 'cpu' }
     );
     
     this.initialized = true;
   }
   
+  // eslint-disable-next-line @typescript-eslint/require-await
   async close(): Promise<void> {
     if (this.closed) {
       return;
@@ -73,7 +74,7 @@ export class EmbeddingGenerator {
   
   getModelInfo(): { name: string; dimension: number; ready: boolean } {
     return {
-      name: this.config.model!,
+      name: this.config.model || DEFAULT_MODEL,
       dimension: EMBEDDING_DIMENSION,
       ready: this.initialized
     };
@@ -155,7 +156,7 @@ export class EmbeddingGenerator {
    * @returns Array of embeddings in the same order as input texts
    */
   private async processBatches(texts: string[]): Promise<number[][]> {
-    const results: number[][] = new Array(texts.length);
+    const results: number[][] = new Array<number[]>(texts.length);
     const batches = this.createBatches(texts);
     
     // Process all batches in parallel
@@ -174,7 +175,7 @@ export class EmbeddingGenerator {
    */
   private createBatches(texts: string[]): Array<{ batch: string[]; startIndex: number }> {
     const batches: Array<{ batch: string[]; startIndex: number }> = [];
-    const batchSize = this.config.batchSize!;
+    const batchSize = this.config.batchSize || DEFAULT_BATCH_SIZE;
     
     for (let i = 0; i < texts.length; i += batchSize) {
       batches.push({
@@ -197,7 +198,10 @@ export class EmbeddingGenerator {
     startIndex: number, 
     results: number[][]
   ): Promise<void> {
-    const output = await this.pipeline!(batch, {
+    if (!this.pipeline) {
+      throw new Error('Pipeline not initialized');
+    }
+    const output = await this.pipeline(batch, {
       pooling: 'mean',
       normalize: true
     });
@@ -209,7 +213,10 @@ export class EmbeddingGenerator {
       results[startIndex + index] = embedding;
       
       if (this.config.cache) {
-        this.addToCache(batch[index]!, embedding);
+        const batchText = batch[index];
+        if (batchText) {
+          this.addToCache(batchText, embedding);
+        }
       }
     });
   }
@@ -224,7 +231,7 @@ export class EmbeddingGenerator {
     const total = this.cacheHits + this.cacheMisses;
     return {
       size: this.cache.size,
-      maxSize: this.config.cacheSize!,
+      maxSize: this.config.cacheSize || DEFAULT_CACHE_SIZE,
       hits: this.cacheHits,
       misses: this.cacheMisses,
       hitRate: total > 0 ? this.cacheHits / total : 0
@@ -267,7 +274,7 @@ export class EmbeddingGenerator {
   
   private addToCache(text: string, embedding: number[]): void {
     // Enforce cache size limit
-    if (this.cache.size >= this.config.cacheSize!) {
+    if (this.cache.size >= (this.config.cacheSize || DEFAULT_CACHE_SIZE)) {
       // Remove oldest entry (simple LRU)
       const firstKey = this.cache.keys().next().value;
       if (firstKey) {
@@ -304,7 +311,10 @@ export class EmbeddingGenerator {
     
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
       try {
-        const output = await this.pipeline!(text, {
+        if (!this.pipeline) {
+          throw new Error('Pipeline not initialized');
+        }
+        const output = await this.pipeline(text, {
           pooling: 'mean',
           normalize: true
         });
@@ -330,7 +340,7 @@ export class EmbeddingGenerator {
       }
     }
     
-    throw new Error(`Failed to generate embedding: ${lastError!.message}`);
+    throw new Error(`Failed to generate embedding: ${lastError ? lastError.message : 'Unknown error'}`);
   }
   
   /**
@@ -339,13 +349,20 @@ export class EmbeddingGenerator {
    * @param batchSize The number of texts in the batch
    * @returns Array of individual embeddings
    */
-  private extractBatchEmbeddings(batchOutput: any, batchSize: number): number[][] {
+  private extractBatchEmbeddings(batchOutput: unknown, batchSize: number): number[][] {
     const embeddings: number[][] = [];
+    
+    // Type check the batch output
+    if (!batchOutput || typeof batchOutput !== 'object' || !('data' in batchOutput)) {
+      throw new Error('Invalid batch output format');
+    }
+    
+    const output = batchOutput as { data: Float32Array };
     
     for (let i = 0; i < batchSize; i++) {
       const startIdx = i * EMBEDDING_DIMENSION;
       const endIdx = startIdx + EMBEDDING_DIMENSION;
-      const embedding: number[] = Array.from(batchOutput.data.slice(startIdx, endIdx));
+      const embedding: number[] = Array.from(output.data.slice(startIdx, endIdx));
       embeddings.push(embedding);
     }
     
@@ -364,7 +381,11 @@ export class EmbeddingGenerator {
     
     if (this.cache.has(text)) {
       this.cacheHits++;
-      return this.cache.get(text)!.embedding;
+      const cached = this.cache.get(text);
+      if (!cached) {
+        throw new Error('Cache entry not found');
+      }
+      return cached.embedding;
     }
     
     this.cacheMisses++;

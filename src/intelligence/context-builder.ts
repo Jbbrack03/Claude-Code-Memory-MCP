@@ -51,6 +51,7 @@ export class ContextBuilder {
 
   getOptions(): Required<Omit<ContextBuilderOptions, 'customFormatters'>> {
     const { customFormatters, ...rest } = this.options;
+    void customFormatters; // Unused but needed for destructuring
     return rest;
   }
 
@@ -82,7 +83,8 @@ export class ContextBuilder {
       context += this.formatEmptyContext();
     } else {
       for (let i = 0; i < sorted.length; i++) {
-        const memory = sorted[i]!;
+        const memory = sorted[i];
+        if (!memory) continue;
         const formatted = this.formatMemory(memory, i + 1);
         
         // Check if adding this memory would exceed size limit
@@ -193,7 +195,7 @@ export class ContextBuilder {
     }
   }
 
-  private formatMetadataMarkdown(metadata: Record<string, any>): string {
+  private formatMetadataMarkdown(metadata: Record<string, unknown>): string {
     let result = '';
     const eventType = metadata.eventType;
 
@@ -201,35 +203,35 @@ export class ContextBuilder {
     switch (eventType) {
       case 'code_write':
         result += `**Type:** ${eventType}\n`;
-        if (metadata.file) result += `**File:** ${metadata.file}\n`;
-        if (metadata.lines) result += `**Lines:** ${metadata.lines}\n`;
-        if (metadata.language) result += `**Language:** ${metadata.language}\n`;
-        if (metadata.functions) result += `**Functions:** ${metadata.functions.join(', ')}\n`;
+        if (metadata.file) result += `**File:** ${String(metadata.file)}\n`;
+        if (metadata.lines) result += `**Lines:** ${String(metadata.lines)}\n`;
+        if (metadata.language) result += `**Language:** ${String(metadata.language)}\n`;
+        if (metadata.functions && Array.isArray(metadata.functions)) result += `**Functions:** ${metadata.functions.map(String).join(', ')}\n`;
         break;
 
       case 'command_run':
         result += `**Type:** ${eventType}\n`;
-        if (metadata.command) result += `**Command:** \`${metadata.command}\`\n`;
-        if (metadata.exitCode !== undefined) result += `**Exit Code:** ${metadata.exitCode}${metadata.exitCode === 0 ? ' ✓' : ''}\n`;
-        if (metadata.duration) result += `**Duration:** ${(metadata.duration / 1000).toFixed(2)}s\n`;
-        if (metadata.cwd) result += `**Working Dir:** ${metadata.cwd}\n`;
+        if (metadata.command) result += `**Command:** \`${String(metadata.command)}\`\n`;
+        if (metadata.exitCode !== undefined) result += `**Exit Code:** ${String(metadata.exitCode)}${metadata.exitCode === 0 ? ' ✓' : ''}\n`;
+        if (metadata.duration && typeof metadata.duration === 'number') result += `**Duration:** ${(metadata.duration / 1000).toFixed(2)}s\n`;
+        if (metadata.cwd) result += `**Working Dir:** ${String(metadata.cwd)}\n`;
         break;
 
       case 'test_run':
         result += `**Type:** ${eventType}\n`;
-        if (metadata.testFile) result += `**Test File:** ${metadata.testFile}\n`;
+        if (metadata.testFile) result += `**Test File:** ${String(metadata.testFile)}\n`;
         if (metadata.passed !== undefined && metadata.failed !== undefined) {
-          result += `**Results:** ${metadata.passed} passed, ${metadata.failed} failed\n`;
+          result += `**Results:** ${String(metadata.passed)} passed, ${String(metadata.failed)} failed\n`;
         }
-        if (metadata.duration) result += `**Duration:** ${(metadata.duration / 1000).toFixed(2)}s\n`;
+        if (metadata.duration && typeof metadata.duration === 'number') result += `**Duration:** ${(metadata.duration / 1000).toFixed(2)}s\n`;
         break;
 
       case 'git_commit':
         result += `**Type:** ${eventType}\n`;
-        if (metadata.hash) result += `**Commit:** ${metadata.hash}\n`;
-        if (metadata.branch) result += `**Branch:** ${metadata.branch}\n`;
-        if (metadata.author) result += `**Author:** ${metadata.author}\n`;
-        if (metadata.message) result += `**Message:** ${metadata.message}\n`;
+        if (metadata.hash) result += `**Commit:** ${String(metadata.hash)}\n`;
+        if (metadata.branch) result += `**Branch:** ${String(metadata.branch)}\n`;
+        if (metadata.author) result += `**Author:** ${String(metadata.author)}\n`;
+        if (metadata.message) result += `**Message:** ${String(metadata.message)}\n`;
         break;
 
       default:
@@ -246,7 +248,7 @@ export class ContextBuilder {
     return result;
   }
 
-  private formatMetadataPlain(metadata: Record<string, any>): string {
+  private formatMetadataPlain(metadata: Record<string, unknown>): string {
     let result = '';
     const eventType = metadata.eventType;
 
@@ -254,35 +256,35 @@ export class ContextBuilder {
     switch (eventType) {
       case 'code_write':
         result += `Type: ${eventType}\n`;
-        if (metadata.file) result += `File: ${metadata.file}\n`;
-        if (metadata.lines) result += `Lines: ${metadata.lines}\n`;
-        if (metadata.language) result += `Language: ${metadata.language}\n`;
-        if (metadata.functions) result += `Functions: ${metadata.functions.join(', ')}\n`;
+        if (metadata.file) result += `File: ${String(metadata.file)}\n`;
+        if (metadata.lines) result += `Lines: ${String(metadata.lines)}\n`;
+        if (metadata.language) result += `Language: ${String(metadata.language)}\n`;
+        if (metadata.functions && Array.isArray(metadata.functions)) result += `Functions: ${metadata.functions.map(String).join(', ')}\n`;
         break;
 
       case 'command_run':
         result += `Type: ${eventType}\n`;
-        if (metadata.command) result += `Command: ${metadata.command}\n`;
-        if (metadata.exitCode !== undefined) result += `Exit Code: ${metadata.exitCode}${metadata.exitCode === 0 ? ' ✓' : ''}\n`;
-        if (metadata.duration) result += `Duration: ${(metadata.duration / 1000).toFixed(2)}s\n`;
-        if (metadata.cwd) result += `Working Dir: ${metadata.cwd}\n`;
+        if (metadata.command) result += `Command: ${String(metadata.command)}\n`;
+        if (metadata.exitCode !== undefined) result += `Exit Code: ${String(metadata.exitCode)}${metadata.exitCode === 0 ? ' ✓' : ''}\n`;
+        if (metadata.duration && typeof metadata.duration === 'number') result += `Duration: ${(metadata.duration / 1000).toFixed(2)}s\n`;
+        if (metadata.cwd) result += `Working Dir: ${String(metadata.cwd)}\n`;
         break;
 
       case 'test_run':
         result += `Type: ${eventType}\n`;
-        if (metadata.testFile) result += `Test File: ${metadata.testFile}\n`;
+        if (metadata.testFile) result += `Test File: ${String(metadata.testFile)}\n`;
         if (metadata.passed !== undefined && metadata.failed !== undefined) {
-          result += `Results: ${metadata.passed} passed, ${metadata.failed} failed\n`;
+          result += `Results: ${String(metadata.passed)} passed, ${String(metadata.failed)} failed\n`;
         }
-        if (metadata.duration) result += `Duration: ${(metadata.duration / 1000).toFixed(2)}s\n`;
+        if (metadata.duration && typeof metadata.duration === 'number') result += `Duration: ${(metadata.duration / 1000).toFixed(2)}s\n`;
         break;
 
       case 'git_commit':
         result += `Type: ${eventType}\n`;
-        if (metadata.hash) result += `Commit: ${metadata.hash}\n`;
-        if (metadata.branch) result += `Branch: ${metadata.branch}\n`;
-        if (metadata.author) result += `Author: ${metadata.author}\n`;
-        if (metadata.message) result += `Message: ${metadata.message}\n`;
+        if (metadata.hash) result += `Commit: ${String(metadata.hash)}\n`;
+        if (metadata.branch) result += `Branch: ${String(metadata.branch)}\n`;
+        if (metadata.author) result += `Author: ${String(metadata.author)}\n`;
+        if (metadata.message) result += `Message: ${String(metadata.message)}\n`;
         break;
 
       default:
@@ -299,7 +301,7 @@ export class ContextBuilder {
     return result;
   }
 
-  private formatMetadataField(key: string, value: any, prefix: string): string {
+  private formatMetadataField(key: string, value: unknown, prefix: string): string {
     if (typeof value === 'object' && value !== null) {
       // Handle nested objects
       let result = `${prefix}${key}:${prefix ? '**' : ''}\n`;
@@ -310,7 +312,7 @@ export class ContextBuilder {
       }
       return result;
     } else {
-      return `${prefix}${key}:${prefix ? '**' : ''} ${value}\n`;
+      return `${prefix}${key}:${prefix ? '**' : ''} ${String(value)}\n`;
     }
   }
 
@@ -380,6 +382,7 @@ export class ContextBuilder {
     return memory.substring(0, maxLength);
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async close(): Promise<void> {
     // Cleanup if needed
     logger.debug("Closing context builder");

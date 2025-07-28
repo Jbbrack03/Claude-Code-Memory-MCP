@@ -24,7 +24,7 @@ describe('TransactionManager', () => {
     });
     
     // Then: Transaction completes and returns result
-    expect(result.content).toBe('content');
+    expect((result as any).content).toBe('content');
   });
 
   it('should rollback transaction on error', async () => {
@@ -41,7 +41,7 @@ describe('TransactionManager', () => {
     
     // Then: No data was committed
     const count = await db.get('SELECT COUNT(*) as count FROM memories');
-    expect(count.count).toBe(0);
+    expect((count as any).count).toBe(0);
   });
 
   it('should handle nested transactions', async () => {
@@ -59,7 +59,7 @@ describe('TransactionManager', () => {
     // Then: Both operations complete
     const sessionExists = await db.get('SELECT COUNT(*) as count FROM sessions WHERE id = ?', ['s1']);
     const memoryExists = await db.get('SELECT COUNT(*) as count FROM memories WHERE id = ?', ['m1']);
-    expect(sessionExists.count).toBe(1);
-    expect(memoryExists.count).toBe(1);
+    expect((sessionExists as any).count).toBe(1);
+    expect((memoryExists as any).count).toBe(1);
   });
 });

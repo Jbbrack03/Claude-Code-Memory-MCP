@@ -34,7 +34,7 @@ describe('Intelligence Layer Integration', () => {
     await intelligence.initialize();
     
     hooks = new HookSystem(testConfig.hooks);
-    await hooks.initialize();
+    hooks.initialize();
   });
 
   afterEach(async () => {
@@ -284,7 +284,7 @@ describe('Intelligence Layer Integration', () => {
       await intelligenceWithFallback.initialize();
       
       // Mock getVectorStore to return null
-      jest.spyOn(storage, 'getVectorStore').mockResolvedValue(null);
+      jest.spyOn(storage, 'getVectorStore').mockReturnValue(null);
 
       // Create test memories
       await storage.captureMemory({

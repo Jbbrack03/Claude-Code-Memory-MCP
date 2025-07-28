@@ -52,9 +52,14 @@ class SimilarityCalculator {
     let normB = 0;
     
     for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i]! * b[i]!;
-      normA += a[i]! * a[i]!;
-      normB += b[i]! * b[i]!;
+      const aVal = a[i];
+      const bVal = b[i];
+      if (aVal === undefined || bVal === undefined) {
+        throw new Error('Invalid vector: undefined values');
+      }
+      dotProduct += aVal * bVal;
+      normA += aVal * aVal;
+      normB += bVal * bVal;
     }
     
     normA = Math.sqrt(normA);
@@ -73,7 +78,12 @@ class SimilarityCalculator {
   private euclideanDistance(a: number[], b: number[]): number {
     let sum = 0;
     for (let i = 0; i < a.length; i++) {
-      const diff = a[i]! - b[i]!;
+      const aVal = a[i];
+      const bVal = b[i];
+      if (aVal === undefined || bVal === undefined) {
+        throw new Error('Invalid vector: undefined values');
+      }
+      const diff = aVal - bVal;
       sum += diff * diff;
     }
     return Math.sqrt(sum);
@@ -452,8 +462,11 @@ export class VectorStore {
         
         // Load existing vectors if available
         try {
-          const data = await fs.readFile(this.indexFile!, 'utf-8');
-          const parsed = JSON.parse(data);
+          if (!this.indexFile) {
+            throw new Error('Index file path not set');
+          }
+          const data = await fs.readFile(this.indexFile, 'utf-8');
+          const parsed = JSON.parse(data) as Record<string, { vector: number[]; metadata: Metadata }>;
           
           // In efficient memory mode, don't load all vectors into memory
           if (this.config.memoryMode === 'efficient') {
@@ -488,7 +501,10 @@ export class VectorStore {
     if (this.config.precomputeQueries && this.config.embeddingGenerator) {
       const embeddings = await this.config.embeddingGenerator.generateBatch(this.config.precomputeQueries);
       this.config.precomputeQueries.forEach((query, i) => {
-        this.precomputedEmbeddings.set(query, embeddings[i]!);
+        const embedding = embeddings[i];
+        if (embedding) {
+          this.precomputedEmbeddings.set(query, embedding);
+        }
       });
     }
     
@@ -535,6 +551,7 @@ export class VectorStore {
     return id;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async get(id: string): Promise<VectorResult | null> {
     if (!this.initialized) {
       throw new Error("Vector store not initialized");
@@ -695,7 +712,7 @@ export class VectorStore {
       generator = this.config.embeddingGenerators[metadata.model as string];
       modelName = metadata.model as string;
       if (!generator) {
-        throw new Error(`Embedding model '${metadata.model}' not configured`);
+        throw new Error(`Embedding model '${String(metadata.model)}' not configured`);
       }
     } else if (this.config.embeddingGenerators && this.config.embeddingGenerators.default) {
       // Use default from multiple generators
@@ -732,8 +749,8 @@ export class VectorStore {
       }
       
       return await this.store(embedding, enrichedMetadata);
-    } catch (error: any) {
-      throw new Error(`Failed to generate embedding: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -742,13 +759,26 @@ export class VectorStore {
       throw new Error('Embedding generator not configured');
     }
 
-    const embeddings = await this.config.embeddingGenerator.generateBatch(texts);
-    const ids: string[] = [];
-
+    // Generate embeddings only for non-empty texts
+    const validIndices: number[] = [];
+    const validTexts: string[] = [];
+    
     for (let i = 0; i < texts.length; i++) {
       const text = texts[i];
-      if (text !== undefined) {
-        const id = await this.store(embeddings[i]!, { ...metadata, text });
+      if (text !== undefined && text.trim() !== '') {
+        validIndices.push(i);
+        validTexts.push(text);
+      }
+    }
+
+    const embeddings = await this.config.embeddingGenerator.generateBatch(validTexts);
+    const ids: string[] = [];
+
+    for (let i = 0; i < validTexts.length && i < embeddings.length; i++) {
+      const embedding = embeddings[i];
+      const text = validTexts[i];
+      if (embedding && text) {
+        const id = await this.store(embedding, { ...metadata, text });
         ids.push(id);
       }
     }
@@ -790,14 +820,22 @@ export class VectorStore {
       
       for (let i = 0; i < vectors.length; i++) {
         try {
-          this.validateBatchVector(vectors[i]!.vector, i);
-        } catch (error: any) {
-          validationErrors.push({ index: i, error: error.message });
+          const vector = vectors[i];
+          if (!vector) {
+            throw new Error(`Vector at index ${i} is undefined`);
+          }
+          this.validateBatchVector(vector.vector, i);
+        } catch (error) {
+          validationErrors.push({ index: i, error: error instanceof Error ? error.message : String(error) });
         }
       }
       
       if (validationErrors.length > 0) {
-        const error = new Error(`Batch validation failed: ${validationErrors[0]!.error}`) as VectorStoreError;
+        const firstError = validationErrors[0];
+        if (!firstError) {
+          throw new Error('Validation errors array is empty');
+        }
+        const error = new Error(`Batch validation failed: ${firstError.error}`) as VectorStoreError;
         // Transform error messages in details for test compatibility
         error.details = validationErrors.map(ve => {
           let errorMsg = ve.error;
@@ -824,7 +862,10 @@ export class VectorStore {
       for (let j = 0; j < chunk.length; j++) {
         const idx = i + j;
         try {
-          const v = chunk[j]!;
+          const v = chunk[j];
+          if (!v) {
+            throw new Error(`Unexpected undefined vector at index ${idx}`);
+          }
           
           // Validate in partial mode
           if (this.config.allowPartialBatch) {
@@ -846,10 +887,10 @@ export class VectorStore {
               currentId: id
             });
           }
-        } catch (error: any) {
+        } catch (error) {
           if (this.config.allowPartialBatch) {
             // Reformat error message for partial batch mode
-            let errorMsg = error.message;
+            let errorMsg = error instanceof Error ? error.message : String(error);
             
             // Transform dimension errors to expected format
             const dimMatch = errorMsg.match(/Vector at index \d+ has dimension (\d+), expected (\d+)/);
@@ -884,13 +925,13 @@ export class VectorStore {
     return stored;
   }
 
-  async upsertBatch(vectors: Array<{ id: string; vector: number[]; metadata: Record<string, any> }>): Promise<BatchUpsertResult> {
+  async upsertBatch(vectors: Array<{ id: string; vector: number[]; metadata: Record<string, unknown> }>): Promise<BatchUpsertResult> {
     const updated: string[] = [];
     const inserted: string[] = [];
 
     for (const v of vectors) {
       const exists = this.vectors.has(v.id);
-      this.vectors.set(v.id, { vector: v.vector, metadata: v.metadata });
+      this.vectors.set(v.id, { vector: v.vector, metadata: v.metadata as Metadata });
       
       if (exists) {
         updated.push(v.id);
@@ -910,13 +951,14 @@ export class VectorStore {
     const results: (VectorResult | null)[] = [];
     
     for (const id of ids) {
-      results.push(await this.get(id));
+      const result = await this.get(id);
+      results.push(result || null);
     }
     
     return results;
   }
 
-  async getBatchByFilter(filter: Record<string, any>, pagination?: PaginationOptions): Promise<VectorResult[]> {
+  getBatchByFilter(filter: Record<string, unknown>, pagination?: PaginationOptions): VectorResult[] {
     const results: VectorResult[] = [];
     let count = 0;
     let skipped = 0;
@@ -970,7 +1012,7 @@ export class VectorStore {
     return { deleted, notFound };
   }
 
-  async deleteByFilter(filter: Record<string, any>): Promise<{ deletedCount: number }> {
+  async deleteByFilter(filter: Record<string, unknown>): Promise<{ deletedCount: number }> {
     const toDelete: string[] = [];
     
     for (const [id, data] of this.vectors.entries()) {
@@ -990,7 +1032,7 @@ export class VectorStore {
     return { deletedCount: toDelete.length };
   }
 
-  async searchBatch(queries: Array<{ vector: number[]; k: number; filter?: Record<string, any>; threshold?: number }>): Promise<VectorResult[][]> {
+  async searchBatch(queries: Array<{ vector: number[]; k: number; filter?: Record<string, unknown>; threshold?: number }>): Promise<VectorResult[][]> {
     // Process searches in parallel for better performance
     const searchPromises = queries.map(query => 
       this.search(query.vector, {
@@ -1041,14 +1083,17 @@ export class VectorStore {
     // Reorder results based on reranking
     const reorderedResults: VectorResult[] = [];
     for (const item of reranked) {
-      reorderedResults.push(results[item.index]!);
+      const result = results[item.index];
+      if (result) {
+        reorderedResults.push(result);
+      }
     }
     
     return reorderedResults.slice(0, options.k);
   }
 
   // Performance and monitoring methods
-  async getFilterCacheStats(): Promise<{ hits: number; misses: number; hitRate: number }> {
+  getFilterCacheStats(): { hits: number; misses: number; hitRate: number } {
     // Simple implementation - in real world would track actual hits/misses
     const total = 100; // Mock data
     const hits = 50;
@@ -1059,7 +1104,7 @@ export class VectorStore {
     };
   }
 
-  async getFilterStats(): Promise<FilterStats> {
+  getFilterStats(): FilterStats {
     if (!this.config.trackFilterStats) {
       throw new Error('Filter stats tracking not enabled');
     }
@@ -1067,11 +1112,11 @@ export class VectorStore {
     return this.filterStatsTracker.getStats();
   }
 
-  async getOptimizationSuggestions(): Promise<OptimizationSuggestion[]> {
+  getOptimizationSuggestions(): OptimizationSuggestion[] {
     const suggestions: OptimizationSuggestion[] = [];
     
     // Check for frequently filtered fields without indexes
-    const stats = await this.getFilterStats();
+    const stats = this.getFilterStats();
     for (const [field, frequency] of Object.entries(stats.filterFieldFrequency)) {
       if (frequency > 10 && !this.config.metadataIndexes?.includes(field)) {
         suggestions.push({
@@ -1095,7 +1140,7 @@ export class VectorStore {
     return suggestions;
   }
 
-  async getMetrics(): Promise<VectorMetrics> {
+  getMetrics(): VectorMetrics {
     const metrics = this.metricsTracker.getMetrics();
     // Update storage metrics
     metrics.storage.vectorCount = this.vectors.size;
@@ -1103,8 +1148,8 @@ export class VectorStore {
     return metrics;
   }
 
-  async checkHealth(): Promise<HealthStatus> {
-    const metrics = await this.getMetrics();
+  checkHealth(): HealthStatus {
+    const metrics = this.getMetrics();
     
     return {
       status: 'healthy',
@@ -1117,17 +1162,17 @@ export class VectorStore {
     };
   }
 
-  async getAnomalies(): Promise<Anomaly[]> {
+  getAnomalies(): Anomaly[] {
     const anomalies: Anomaly[] = [];
     
     // Check for duplicate vectors
     const vectorHashes = new Map<string, number>();
-    for (const [_, data] of this.vectors.entries()) {
+    for (const [, data] of this.vectors.entries()) {
       const hash = JSON.stringify(data.vector);
       vectorHashes.set(hash, (vectorHashes.get(hash) || 0) + 1);
     }
     
-    for (const [_, count] of vectorHashes.entries()) {
+    for (const [, count] of vectorHashes.entries()) {
       if (count > 50) {
         anomalies.push({
           type: 'DUPLICATE_VECTORS',
@@ -1157,7 +1202,7 @@ export class VectorStore {
 
   async restoreFromBackup(backupPath: string): Promise<void> {
     const data = await fs.readFile(backupPath, 'utf-8');
-    const parsed = JSON.parse(data);
+    const parsed = JSON.parse(data) as Record<string, { vector: number[]; metadata: Metadata; }>;
     this.vectors = new Map(Object.entries(parsed));
     
     if (this.path) {
@@ -1171,21 +1216,22 @@ export class VectorStore {
       // Handle top-level operators first
       if (key === '$or') {
         // Handle OR conditions
-        const orConditions = value as any[];
+        const orConditions = value as Filter[];
         const matchesAny = orConditions.some(cond => this.matchesFilter(metadata, cond));
         if (!matchesAny) return false;
       } else if (key === '$and') {
         // Handle AND conditions
-        const andConditions = value as any[];
+        const andConditions = value as Filter[];
         const matchesAll = andConditions.every(cond => this.matchesFilter(metadata, cond));
         if (!matchesAll) return false;
       } else if (key === '$computed') {
         // Handle computed fields
-        const computedFields = value as Record<string, any>;
+        const computedFields = value as Record<string, unknown>;
         for (const [, fieldDef] of Object.entries(computedFields)) {
-          if (fieldDef.$formula) {
+          const field = fieldDef as Record<string, unknown>;
+          if (field.$formula) {
             // Simple formula evaluation - only supports basic arithmetic
-            const formula = fieldDef.$formula as string;
+            const formula = field.$formula as string;
             let computedValue: number;
             
             // Handle NOW constant
@@ -1205,12 +1251,12 @@ export class VectorStore {
               }
               
               // Apply comparison operators
-              if (fieldDef.$lt !== undefined && computedValue >= fieldDef.$lt) return false;
-              if (fieldDef.$lte !== undefined && computedValue > fieldDef.$lte) return false;
-              if (fieldDef.$gt !== undefined && computedValue <= fieldDef.$gt) return false;
-              if (fieldDef.$gte !== undefined && computedValue < fieldDef.$gte) return false;
-              if (fieldDef.$eq !== undefined && computedValue !== fieldDef.$eq) return false;
-              if (fieldDef.$ne !== undefined && computedValue === fieldDef.$ne) return false;
+              if (field.$lt !== undefined && computedValue >= (field.$lt as number)) return false;
+              if (field.$lte !== undefined && computedValue > (field.$lte as number)) return false;
+              if (field.$gt !== undefined && computedValue <= (field.$gt as number)) return false;
+              if (field.$gte !== undefined && computedValue < (field.$gte as number)) return false;
+              if (field.$eq !== undefined && computedValue !== (field.$eq as number)) return false;
+              if (field.$ne !== undefined && computedValue === (field.$ne as number)) return false;
             }
           }
         }
@@ -1218,31 +1264,50 @@ export class VectorStore {
         if ('$gte' in value || '$lt' in value) {
           const metaValue = metadata[key];
           if (typeof metaValue !== 'number') return false;
-          if ('$gte' in value && metaValue < value.$gte) return false;
-          if ('$lt' in value && metaValue >= value.$lt) return false;
+          const filterVal = value as { $gte?: MetadataValue; $lt?: MetadataValue };
+          if (filterVal.$gte !== undefined && typeof filterVal.$gte === 'number' && metaValue < filterVal.$gte) return false;
+          if (filterVal.$lt !== undefined && typeof filterVal.$lt === 'number' && metaValue >= filterVal.$lt) return false;
           continue;
         }
         if ('$in' in value) {
-          if (!value.$in.includes(metadata[key])) return false;
+          const filterVal = value as { $in?: MetadataValue[] };
+          const metaValue = metadata[key];
+          if (filterVal.$in && metaValue !== undefined) {
+            // Handle both single values and arrays
+            if (Array.isArray(metaValue)) {
+              // Check if any value in the array is in the filter
+              const inValues = filterVal.$in;
+              if (!inValues || !metaValue.some(v => inValues.includes(v))) return false;
+            } else {
+              // Single value check
+              const inValues = filterVal.$in;
+              if (!inValues || !inValues.includes(metaValue)) return false;
+            }
+          }
           continue;
         }
         if ('$ne' in value) {
-          if (metadata[key] === value.$ne) return false;
+          const filterVal = value as { $ne?: MetadataValue };
+          if (metadata[key] === filterVal.$ne) return false;
           continue;
         }
         if ('$not' in value) {
-          if (metadata[key] === value.$not) return false;
+          const filterVal = value as { $not?: MetadataValue };
+          if (metadata[key] === filterVal.$not) return false;
           continue;
         }
         if ('$regex' in value) {
-          const regex = new RegExp(value.$regex);
+          const filterVal = value as { $regex?: string };
+          if (!filterVal.$regex) continue;
+          const regex = new RegExp(filterVal.$regex);
           const metaValue = metadata[key];
           if (typeof metaValue !== 'string' || !regex.test(metaValue)) return false;
           continue;
         }
         if ('$exists' in value) {
           const exists = key in metadata;
-          if (exists !== value.$exists) return false;
+          const filterVal = value as { $exists?: boolean };
+          if (exists !== filterVal.$exists) return false;
           continue;
         }
       } else {
@@ -1270,8 +1335,11 @@ export class VectorStore {
     // In efficient mode, load vectors from disk on demand
     if (this.config.memoryMode === 'efficient' && this.path) {
       try {
-        const data = await fs.readFile(this.indexFile!, 'utf-8');
-        const parsed = JSON.parse(data);
+        if (!this.indexFile) {
+          throw new Error('Index file path not set');
+        }
+        const data = await fs.readFile(this.indexFile, 'utf-8');
+        const parsed = JSON.parse(data) as Record<string, { vector: number[]; metadata: Metadata }>;
         return new Map(Object.entries(parsed));
       } catch (error) {
         logger.warn("Failed to load vectors from disk in efficient mode");

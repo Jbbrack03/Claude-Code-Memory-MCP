@@ -61,7 +61,10 @@ export class HookExecutor {
     if (parts.length === 0) {
       throw new Error('Invalid command');
     }
-    const cmd = parts[0]!;
+    const cmd = parts[0];
+    if (!cmd) {
+      throw new Error('Command is empty');
+    }
     const args = parts.slice(1);
 
     // Check if command is allowed
@@ -248,7 +251,7 @@ export class HookExecutor {
     });
   }
 
-  async cleanup(): Promise<void> {
+  cleanup(): void {
     // Kill any remaining processes
     for (const proc of this.processes) {
       if (!proc.killed) {

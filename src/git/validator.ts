@@ -66,7 +66,7 @@ export class GitValidator {
       // Validate file references
       if (memory.metadata?.file && memory.gitCommit) {
         if (!await this.validateFileInCommit(memory.metadata.file as string, memory.gitCommit)) {
-          issues.push(`File not found in commit: ${memory.metadata.file}`);
+          issues.push(`File not found in commit: ${String(memory.metadata.file)}`);
         }
       }
 

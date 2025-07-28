@@ -150,7 +150,11 @@ export class CircuitBreaker {
         pendingRequests: 0
       });
     }
-    return this.circuits.get(operationName)!;
+    const circuit = this.circuits.get(operationName);
+    if (!circuit) {
+      throw new Error(`Circuit ${operationName} not found`);
+    }
+    return circuit;
   }
 
   private recordSuccess(operationName: string): void {

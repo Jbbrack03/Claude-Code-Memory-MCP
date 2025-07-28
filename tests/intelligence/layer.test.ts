@@ -343,7 +343,7 @@ describe('IntelligenceLayer', () => {
     it('should support method for setting storage engine', async () => {
       // Given: Storage engine mock
       const mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue({
+        getVectorStore: jest.fn().mockReturnValue({
           search: jest.fn().mockResolvedValue([]),
           initialize: jest.fn(),
           close: jest.fn()
@@ -378,7 +378,7 @@ describe('IntelligenceLayer', () => {
     it('should initialize with StorageEngine dependency', async () => {
       // Given: IntelligenceLayer with storage engine
       const mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue({
+        getVectorStore: jest.fn().mockReturnValue({
           search: jest.fn().mockResolvedValue([]),
           initialize: jest.fn().mockResolvedValue(undefined),
           close: jest.fn().mockResolvedValue(undefined)
@@ -396,7 +396,7 @@ describe('IntelligenceLayer', () => {
     it('should initialize with EmbeddingGenerator dependency', async () => {
       // Given: Dependencies
       const mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(null)
+        getVectorStore: jest.fn().mockReturnValue(null)
       } as any;
       
       const mockEmbeddingGenerator = {
@@ -428,7 +428,7 @@ describe('IntelligenceLayer', () => {
       };
 
       mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(mockVectorStore),
+        getVectorStore: jest.fn().mockReturnValue(mockVectorStore),
       };
 
       mockEmbeddingGenerator = {
@@ -536,7 +536,7 @@ describe('IntelligenceLayer', () => {
 
     beforeEach(() => {
       mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(null)
+        getVectorStore: jest.fn().mockReturnValue(null)
       };
     });
 
@@ -669,7 +669,7 @@ describe('IntelligenceLayer', () => {
       };
 
       mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(mockVectorStore),
+        getVectorStore: jest.fn().mockReturnValue(mockVectorStore),
         getMemory: jest.fn().mockResolvedValue({
           id: 'mem1',
           content: 'Test memory',
@@ -755,8 +755,8 @@ describe('IntelligenceLayer', () => {
 
     beforeEach(() => {
       mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(null),
-        queryMemories: jest.fn().mockResolvedValue([
+        getVectorStore: jest.fn().mockReturnValue(null),
+        queryMemories: jest.fn().mockReturnValue([
           {
             id: 'mem1',
             content: 'SQL result with query terms',
@@ -828,8 +828,10 @@ describe('IntelligenceLayer', () => {
     it('should handle SQL errors gracefully', async () => {
       // Given: SQL error - create custom mock
       const errorMockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(null),
-        queryMemories: jest.fn().mockRejectedValue(new Error('Database error'))
+        getVectorStore: jest.fn().mockReturnValue(null),
+        queryMemories: jest.fn().mockImplementation(() => {
+          throw new Error('Database error');
+        })
       };
 
       // When: Searching
@@ -868,7 +870,7 @@ describe('IntelligenceLayer', () => {
       };
 
       mockStorageEngine = {
-        getVectorStore: jest.fn().mockResolvedValue(mockVectorStore)
+        getVectorStore: jest.fn().mockReturnValue(mockVectorStore)
       };
 
       mockEmbeddingGenerator = {

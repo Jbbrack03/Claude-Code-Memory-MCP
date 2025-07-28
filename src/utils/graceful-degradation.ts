@@ -43,7 +43,7 @@ export class GracefulDegradation {
   /**
    * Handle storage failure - switch to read-only mode
    */
-  static async handleStorageFailure(error: Error): Promise<void> {
+  static handleStorageFailure(error: Error): void {
     logger.warn("Storage failure detected, entering degraded mode", { error: error.message });
     
     const newState: DegradationState = {
@@ -64,7 +64,7 @@ export class GracefulDegradation {
   /**
    * Handle intelligence layer failure - fall back to simple search
    */
-  static async handleIntelligenceFailure(error: Error): Promise<void> {
+  static handleIntelligenceFailure(error: Error): void {
     logger.warn("Intelligence layer failure, disabling semantic features", { error: error.message });
     
     const newState: DegradationState = {
@@ -85,7 +85,7 @@ export class GracefulDegradation {
   /**
    * Handle hook system failure - disable hook execution
    */
-  static async handleHookFailure(error: Error): Promise<void> {
+  static handleHookFailure(error: Error): void {
     logger.warn("Hook system failure, disabling hook execution", { error: error.message });
     
     const newState: DegradationState = {
@@ -105,7 +105,7 @@ export class GracefulDegradation {
   /**
    * Handle git integration failure - disable git features
    */
-  static async handleGitFailure(error: Error): Promise<void> {
+  static handleGitFailure(error: Error): void {
     logger.warn("Git integration failure, disabling git features", { error: error.message });
     
     const newState: DegradationState = {
@@ -126,7 +126,7 @@ export class GracefulDegradation {
   /**
    * Handle multiple system failures - enter emergency mode
    */
-  static async handleMultipleFailures(errors: Error[]): Promise<void> {
+  static handleMultipleFailures(errors: Error[]): void {
     logger.error("Multiple system failures detected, entering emergency mode", { 
       errorCount: errors.length,
       errors: errors.map(e => e.message)
@@ -157,7 +157,7 @@ export class GracefulDegradation {
   /**
    * Attempt to recover from degraded state
    */
-  static async attemptRecovery(): Promise<boolean> {
+  static attemptRecovery(): boolean {
     if (this.currentState.level === DegradationLevel.NONE) {
       return true; // Already healthy
     }
@@ -237,7 +237,7 @@ export class GracefulDegradation {
    * Create a degradation-aware response for MCP tools
    */
   static createDegradedResponse(requestedFeature: string): {
-    content: Array<{ type: string; text: string }>;
+    content: Array<{ type: "text"; text: string }>;
     isError?: boolean;
   } {
     if (!this.isFeatureDisabled(requestedFeature)) {
@@ -249,7 +249,7 @@ export class GracefulDegradation {
 
     return {
       content: [{
-        type: "text",
+        type: "text" as const,
         text: `${message}. System is in ${this.currentState.level} mode due to: ${this.currentState.reason}`
       }],
       isError: true

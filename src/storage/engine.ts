@@ -10,7 +10,7 @@ export interface Memory {
   id: string;
   eventType: string;
   content: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
   sessionId: string;
   workspaceId?: string;
@@ -88,7 +88,7 @@ export class StorageEngine {
     }
     
     // Store in SQLite
-    const storedMemory = await this.sqlite.storeMemory(memory as SQLiteMemory);
+    const storedMemory = this.sqlite.storeMemory(memory as SQLiteMemory);
     
     // Generate embeddings if service is available
     if (this.embeddingService && this.shouldGenerateEmbedding(memory)) {
@@ -101,7 +101,7 @@ export class StorageEngine {
         });
         
         // Store vector mapping in SQLite
-        await this.sqlite.run(
+        this.sqlite.run(
           'INSERT INTO vector_mappings (memory_id, vector_id, model) VALUES (?, ?, ?)',
           [storedMemory.id, vectorId, 'default']
         );
@@ -117,7 +117,10 @@ export class StorageEngine {
     const FILE_THRESHOLD = 10 * 1024; // 10KB
     if (size > FILE_THRESHOLD) {
       try {
-        await this.fileStore.store(storedMemory.id!, memory.content);
+        if (!storedMemory.id) {
+          throw new Error('Memory ID is required for file storage');
+        }
+        await this.fileStore.store(storedMemory.id, memory.content);
         logger.debug(`Stored large content for memory ${storedMemory.id} in file store`);
       } catch (error) {
         logger.error("Failed to store in file system", error);
@@ -128,7 +131,7 @@ export class StorageEngine {
     return storedMemory;
   }
 
-  async queryMemories(filters: {
+  queryMemories(filters: {
     workspaceId?: string;
     sessionId?: string;
     eventType?: string;
@@ -138,7 +141,7 @@ export class StorageEngine {
     limit?: number;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
-  } = {}): Promise<Memory[]> {
+  } = {}): Memory[] {
     if (!this.initialized || !this.sqlite) {
       throw new Error("Storage engine not initialized");
     }
@@ -146,11 +149,11 @@ export class StorageEngine {
     logger.debug("Querying memories", filters);
     
     // Query from SQLite
-    const sqliteMemories = await this.sqlite.queryMemories(filters);
+    const sqliteMemories = this.sqlite.queryMemories(filters);
     
     // Convert to ensure all memories have an id
     const memories: Memory[] = sqliteMemories.map(m => ({
-      id: m.id!,  // queryMemories only returns stored memories with IDs
+      id: m.id || '',  // queryMemories only returns stored memories with IDs
       eventType: m.eventType,
       content: m.content,
       metadata: m.metadata,
@@ -166,32 +169,35 @@ export class StorageEngine {
     return memories;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getStatistics(): Promise<StorageStats> {
     if (!this.initialized || !this.sqlite) {
       throw new Error("Storage engine not initialized");
     }
 
     // Query statistics from database
-    const totalMemories = await this.sqlite.count('memories');
+    const totalMemories = this.sqlite.count('memories');
     
     // Get memory types
     const memoriesByType: Record<string, number> = {};
-    const types = await this.sqlite.all(
+    const types = this.sqlite.all(
       'SELECT event_type, COUNT(*) as count FROM memories GROUP BY event_type'
-    );
+    ) as Array<{ event_type: string; count: number }>;
     for (const type of types) {
-      memoriesByType[type.event_type] = type.count;
+      const eventType = type.event_type;
+      const count = type.count;
+      memoriesByType[eventType] = count;
     }
     
     // Get date range
-    const dateRange = await this.sqlite.get(
+    const dateRange = this.sqlite.get(
       'SELECT MIN(timestamp) as oldest, MAX(timestamp) as newest FROM memories'
-    );
+    ) as { oldest: string; newest: string } | undefined;
     
     // Calculate total size (sum of content lengths for now)
-    const sizeResult = await this.sqlite.get(
+    const sizeResult = this.sqlite.get(
       'SELECT SUM(LENGTH(content)) as total_size FROM memories'
-    );
+    ) as { total_size: number } | undefined;
     
     return {
       totalMemories,
@@ -202,7 +208,7 @@ export class StorageEngine {
     };
   }
 
-  async getVectorStore(): Promise<VectorStore | null> {
+  getVectorStore(): VectorStore | null {
     if (!this.initialized || !this.vectorStore) {
       return null;
     }
@@ -214,7 +220,7 @@ export class StorageEngine {
     
     // Close database connections
     if (this.sqlite) {
-      await this.sqlite.close();
+      this.sqlite.close();
       this.sqlite = null;
     }
     
@@ -226,7 +232,7 @@ export class StorageEngine {
     
     // Close file store
     if (this.fileStore) {
-      await this.fileStore.close();
+      this.fileStore.close();
       this.fileStore = null;
     }
     
@@ -270,7 +276,11 @@ export class StorageEngine {
       throw new Error(`Invalid size format: ${sizeStr}`);
     }
     
-    const value = parseInt(match[1]!);
+    const firstMatch = match[1];
+    if (!firstMatch) {
+      throw new Error('Invalid size format');
+    }
+    const value = parseInt(firstMatch);
     const unit = match[2]?.toUpperCase();
     
     switch (unit) {

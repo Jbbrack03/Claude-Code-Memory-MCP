@@ -27,7 +27,7 @@ describe('MCP Server Integration', () => {
     await storage.initialize();
 
     hooks = new HookSystem(testConfig.hooks);
-    await hooks.initialize();
+    hooks.initialize();
 
     git = new GitIntegration(testConfig.git);
     await git.initialize();

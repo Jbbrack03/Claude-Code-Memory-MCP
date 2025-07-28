@@ -1,4 +1,4 @@
-import { VectorStore, VectorResult, VectorSearchOptions } from "../storage/vector-store.js";
+import { VectorStore, VectorResult, VectorSearchOptions, Metadata } from "../storage/vector-store.js";
 import { VectorIndex, SimpleVectorIndex } from "./vector-index.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -12,7 +12,7 @@ const logger = createLogger("VectorIndexIntegration");
 export class IndexedVectorStore {
   private vectorStore: VectorStore;
   private index: VectorIndex;
-  private idToMetadata: Map<string, any> = new Map();
+  private idToMetadata: Map<string, unknown> = new Map();
 
   constructor(vectorStore: VectorStore, index?: VectorIndex) {
     this.vectorStore = vectorStore;
@@ -27,7 +27,7 @@ export class IndexedVectorStore {
     
     // Get all vectors from the store
     // Note: This is a simplified approach. In production, you'd want batch processing
-    const allVectors = await this.vectorStore.getBatchByFilter({}, { offset: 0, limit: 10000 });
+    const allVectors = this.vectorStore.getBatchByFilter({}, { offset: 0, limit: 10000 });
     
     for (const result of allVectors) {
       await this.index.add(result.id, result.vector);
@@ -59,7 +59,7 @@ export class IndexedVectorStore {
         // Simple filter check (would need full implementation in production)
         let passesFilter = true;
         for (const [key, value] of Object.entries(options.filter)) {
-          if (metadata[key] !== value) {
+          if ((metadata as Record<string, unknown>)[key] !== value) {
             passesFilter = false;
             break;
           }
@@ -85,8 +85,8 @@ export class IndexedVectorStore {
   /**
    * Add a vector to both store and index
    */
-  async addVector(vector: number[], metadata: any = {}): Promise<string> {
-    const id = await this.vectorStore.store(vector, metadata);
+  async addVector(vector: number[], metadata: unknown = {}): Promise<string> {
+    const id = await this.vectorStore.store(vector, metadata as Metadata);
     await this.index.add(id, vector);
     this.idToMetadata.set(id, metadata);
     return id;

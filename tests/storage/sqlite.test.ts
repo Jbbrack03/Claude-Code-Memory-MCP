@@ -46,8 +46,8 @@ describe('SQLiteDatabase', () => {
       await db.initialize();
       
       // Then: WAL mode is active
-      const result = await db.get('PRAGMA journal_mode');
-      expect(result.journal_mode).toBe('wal');
+      const result = db.get('PRAGMA journal_mode');
+      expect((result as any).journal_mode).toBe('wal');
       
       // Cleanup
       await db.close();

@@ -12,6 +12,16 @@ import { ErrorHandler } from "../utils/error-handler.js";
 import { HealthChecker } from "../utils/health-checker.js";
 import { GracefulDegradation } from "../utils/graceful-degradation.js";
 
+// Define metadata schema
+const metadataSchema = z.record(z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+]));
+
 // Initialize server
 const server = new McpServer({
   name: "claude-memory-mcp",
@@ -36,7 +46,7 @@ async function initialize() {
 
     // Initialize hook system
     hooks = new HookSystem(config.hooks);
-    await hooks.initialize();
+    hooks.initialize();
 
     // Initialize git integration
     git = new GitIntegration(config.git);
@@ -81,7 +91,7 @@ function registerTools() {
       inputSchema: {
         eventType: z.string(),
         content: z.string(),
-        metadata: z.record(z.any()).optional()
+        metadata: metadataSchema.optional()
       }
     },
     async (args) => {
@@ -102,7 +112,7 @@ function registerTools() {
 
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Memory captured: ${memory.id}`
           }]
         };
@@ -111,13 +121,13 @@ function registerTools() {
         
         // Handle storage failure gracefully
         if (error instanceof Error && error.message.includes('storage')) {
-          await GracefulDegradation.handleStorageFailure(error);
+          GracefulDegradation.handleStorageFailure(error);
           return GracefulDegradation.createDegradedResponse('memory_capture');
         }
         
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
@@ -135,7 +145,7 @@ function registerTools() {
       inputSchema: {
         query: z.string(),
         limit: z.number().optional().default(10),
-        filters: z.record(z.any()).optional()
+        filters: metadataSchema.optional()
       }
     },
     async (args) => {
@@ -148,7 +158,7 @@ function registerTools() {
 
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify(memories, null, 2)
           }]
         };
@@ -156,7 +166,7 @@ function registerTools() {
         logger.error("Failed to retrieve memories:", error);
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
@@ -186,7 +196,7 @@ function registerTools() {
         logger.error("Failed to get git state:", error);
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
@@ -204,7 +214,7 @@ function registerTools() {
       inputSchema: {
         query: z.string(),
         limit: z.number().optional().default(10),
-        filters: z.record(z.any()).optional()
+        filters: metadataSchema.optional()
       }
     },
     async (args) => {
@@ -222,11 +232,11 @@ function registerTools() {
         });
         
         // Then build context from them
-        const context = await intelligence.buildContext(memories);
+        const context = intelligence.buildContext(memories);
         
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: context
           }]
         };
@@ -235,13 +245,13 @@ function registerTools() {
         
         // Handle intelligence failure gracefully
         if (error instanceof Error && error.message.includes('intelligence')) {
-          await GracefulDegradation.handleIntelligenceFailure(error);
+          GracefulDegradation.handleIntelligenceFailure(error);
           return GracefulDegradation.createDegradedResponse('context_building');
         }
         
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
@@ -267,7 +277,7 @@ function registerTools() {
           const report = await healthChecker.checkHealth();
           return {
             content: [{
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify(report, null, 2)
             }]
           };
@@ -275,7 +285,7 @@ function registerTools() {
           const quick = await healthChecker.quickCheck();
           return {
             content: [{
-              type: "text",
+              type: "text" as const,
               text: `System ${quick.healthy ? 'healthy' : 'unhealthy'}${quick.message ? ': ' + quick.message : ''}`
             }]
           };
@@ -284,7 +294,7 @@ function registerTools() {
         logger.error("Health check failed:", error);
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Health check error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
@@ -305,9 +315,9 @@ function registerResources() {
       description: "Current memory storage statistics",
       mimeType: "application/json"
     },
-    async (uri) => {
+    (uri) => {
       try {
-        const stats = await storage.getStatistics();
+        const stats = storage.getStatistics();
         return {
           contents: [{
             uri: uri.href,
@@ -337,7 +347,7 @@ function registerResources() {
       description: "Active server configuration (sanitized)",
       mimeType: "application/json"
     },
-    async (uri) => {
+    (uri) => {
       const sanitizedConfig = {
         ...config,
         // Remove sensitive information
@@ -371,16 +381,14 @@ async function main() {
     logger.info("Claude Memory MCP Server is running");
 
     // Handle graceful shutdown
-    process.on("SIGINT", async () => {
+    process.on("SIGINT", () => {
       logger.info("Shutting down server...");
-      await cleanup();
-      process.exit(0);
+      void cleanup().then(() => process.exit(0));
     });
 
-    process.on("SIGTERM", async () => {
+    process.on("SIGTERM", () => {
       logger.info("Shutting down server...");
-      await cleanup();
-      process.exit(0);
+      void cleanup().then(() => process.exit(0));
     });
 
   } catch (error) {
@@ -393,7 +401,7 @@ async function main() {
 async function cleanup() {
   try {
     await storage?.close();
-    await hooks?.close();
+    hooks?.close();
     await git?.close();
     await intelligence?.close();
   } catch (error) {

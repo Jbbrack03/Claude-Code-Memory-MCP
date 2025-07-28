@@ -16,12 +16,24 @@ export interface Memory {
   id?: string;
   eventType: string;
   content: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
   sessionId: string;
   workspaceId?: string;
   gitBranch?: string;
   gitCommit?: string;
+}
+
+interface DatabaseRow {
+  id: string;
+  event_type: string;
+  content: string;
+  metadata: string | null;
+  timestamp: string;
+  session_id: string;
+  workspace_id: string | null;
+  git_branch: string | null;
+  git_commit: string | null;
 }
 
 export class SQLiteDatabase {
@@ -58,16 +70,19 @@ export class SQLiteDatabase {
     }
 
     // 4. Run migrations
-    await this.runMigrations();
+    this.runMigrations();
     
     logger.info('SQLite database initialized');
   }
 
-  private async runMigrations(): Promise<void> {
+  private runMigrations(): void {
     logger.debug('Running database migrations...');
     
     // Create migrations table
-    this.db!.exec(`
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
@@ -155,15 +170,18 @@ export class SQLiteDatabase {
 
     // Run each migration
     for (const migration of migrations) {
-      await this.runMigration(migration);
+      this.runMigration(migration);
     }
     
     logger.debug('All migrations completed');
   }
 
-  private async runMigration(migration: { name: string; sql: string }): Promise<void> {
+  private runMigration(migration: { name: string; sql: string }): void {
     // Check if migration has already been applied
-    const existing = this.db!.prepare(
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    const existing = this.db.prepare(
       'SELECT id FROM migrations WHERE name = ?'
     ).get(migration.name);
 
@@ -172,9 +190,12 @@ export class SQLiteDatabase {
       logger.debug(`SQL: ${migration.sql.trim()}`);
       
       // Run in transaction
-      const transaction = this.db!.transaction(() => {
-        this.db!.exec(migration.sql.trim());
-        this.db!.prepare(
+      const transaction = this.db.transaction(() => {
+        if (!this.db) {
+          throw new Error('Database not initialized');
+        }
+        this.db.exec(migration.sql.trim());
+        this.db.prepare(
           'INSERT INTO migrations (name) VALUES (?)'
         ).run(migration.name);
       });
@@ -184,7 +205,7 @@ export class SQLiteDatabase {
     }
   }
 
-  async storeMemory(memory: Memory): Promise<Memory & { id: string }> {
+  storeMemory(memory: Memory): Memory & { id: string } {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
@@ -214,14 +235,14 @@ export class SQLiteDatabase {
     return { ...memory, id };
   }
 
-  async getMemory(id: string): Promise<Memory | null> {
+  getMemory(id: string): Memory | null {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
 
     const row = this.db.prepare(`
       SELECT * FROM memories WHERE id = ?
-    `).get(id) as any;
+    `).get(id) as DatabaseRow | undefined;
 
     if (!row) {
       return null;
@@ -231,12 +252,12 @@ export class SQLiteDatabase {
       id: row.id,
       eventType: row.event_type,
       content: row.content,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : undefined,
       timestamp: new Date(row.timestamp),
       sessionId: row.session_id,
-      workspaceId: row.workspace_id,
-      gitBranch: row.git_branch,
-      gitCommit: row.git_commit
+      workspaceId: row.workspace_id || undefined,
+      gitBranch: row.git_branch || undefined,
+      gitCommit: row.git_commit || undefined
     };
   }
 
@@ -271,10 +292,18 @@ export class SQLiteDatabase {
       }
     });
 
-    transaction(memories);
+    // Wrap in Promise to match test expectations
+    return new Promise((resolve, reject) => {
+      try {
+        transaction(memories);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
-  async get(query: string, params?: any[]): Promise<any> {
+  get(query: string, params?: unknown[]): unknown {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
@@ -282,14 +311,14 @@ export class SQLiteDatabase {
     return params ? stmt.get(...params) : stmt.get();
   }
 
-  async all(query: string): Promise<any[]> {
+  all(query: string): unknown[] {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
     return this.db.prepare(query).all();
   }
 
-  async run(query: string, params?: any[]): Promise<any> {
+  run(query: string, params?: unknown[]): Database.RunResult {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
@@ -297,11 +326,11 @@ export class SQLiteDatabase {
     return params ? stmt.run(...params) : stmt.run();
   }
 
-  async count(table: string): Promise<number> {
+  count(table: string): number {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
-    const result = this.db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as any;
+    const result = this.db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number };
     return result.count;
   }
 
@@ -312,16 +341,25 @@ export class SQLiteDatabase {
 
     // Create transaction context with synchronous methods
     const context: TransactionContext = {
-      run: (query: string, params?: any[]) => {
-        const stmt = this.db!.prepare(query);
+      run: (query: string, params?: unknown[]) => {
+        if (!this.db) {
+          throw new Error('Database not initialized');
+        }
+        const stmt = this.db.prepare(query);
         return stmt.run(...(params || []));
       },
-      get: (query: string, params?: any[]) => {
-        const stmt = this.db!.prepare(query);
+      get: (query: string, params?: unknown[]) => {
+        if (!this.db) {
+          throw new Error('Database not initialized');
+        }
+        const stmt = this.db.prepare(query);
         return stmt.get(...(params || []));
       },
-      all: (query: string, params?: any[]) => {
-        const stmt = this.db!.prepare(query);
+      all: (query: string, params?: unknown[]) => {
+        if (!this.db) {
+          throw new Error('Database not initialized');
+        }
+        const stmt = this.db.prepare(query);
         return stmt.all(...(params || []));
       }
     };
@@ -334,7 +372,7 @@ export class SQLiteDatabase {
     return transaction();
   }
 
-  async queryMemories(filters: {
+  queryMemories(filters: {
     workspaceId?: string;
     sessionId?: string;
     eventType?: string;
@@ -344,13 +382,13 @@ export class SQLiteDatabase {
     limit?: number;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
-  } = {}): Promise<Memory[]> {
+  } = {}): Memory[] {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
 
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.workspaceId !== undefined) {
       conditions.push('workspace_id = ?');
@@ -397,22 +435,22 @@ export class SQLiteDatabase {
       query += ` LIMIT ${filters.limit}`;
     }
 
-    const rows = this.db.prepare(query).all(...params) as any[];
+    const rows = this.db.prepare(query).all(...params) as DatabaseRow[];
 
     return rows.map(row => ({
       id: row.id,
       eventType: row.event_type,
       content: row.content,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : undefined,
       timestamp: new Date(row.timestamp),
       sessionId: row.session_id,
-      workspaceId: row.workspace_id,
-      gitBranch: row.git_branch,
-      gitCommit: row.git_commit
+      workspaceId: row.workspace_id || undefined,
+      gitBranch: row.git_branch || undefined,
+      gitCommit: row.git_commit || undefined
     }));
   }
 
-  async close(): Promise<void> {
+  close(): void {
     if (this.db) {
       logger.info('Closing database connection...');
       this.db.close();
@@ -427,7 +465,7 @@ export class SQLiteDatabase {
 }
 
 interface TransactionContext {
-  run(query: string, params?: any[]): any;
-  get(query: string, params?: any[]): any;
-  all(query: string, params?: any[]): any[];
+  run(query: string, params?: unknown[]): Database.RunResult;
+  get(query: string, params?: unknown[]): unknown;
+  all(query: string, params?: unknown[]): unknown[];
 }

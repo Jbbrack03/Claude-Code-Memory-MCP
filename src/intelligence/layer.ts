@@ -9,7 +9,7 @@ const logger = createLogger("IntelligenceLayer");
 
 export interface RetrievalOptions {
   limit?: number;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
   minScore?: number;
   includeMetadata?: boolean;
 }
@@ -18,7 +18,7 @@ export interface RetrievedMemory {
   id: string;
   content: string;
   score: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
   eventType?: string;
   sessionId?: string;
@@ -67,12 +67,12 @@ export class IntelligenceLayer {
     
     // Get vector store from storage engine if available
     if (this.storageEngine) {
-      this.vectorStore = await this.storageEngine.getVectorStore() || undefined;
+      this.vectorStore = this.storageEngine.getVectorStore() || undefined;
     }
     
     // Pass embedding service to storage engine if available
-    if (this.storageEngine && (this.storageEngine as any).setEmbeddingService) {
-      (this.storageEngine as any).setEmbeddingService(
+    if (this.storageEngine && 'setEmbeddingService' in this.storageEngine && typeof this.storageEngine.setEmbeddingService === 'function') {
+      this.storageEngine.setEmbeddingService(
         this.embeddingGenerator.generate.bind(this.embeddingGenerator)
       );
     }
@@ -127,7 +127,11 @@ export class IntelligenceLayer {
     const cacheKey = JSON.stringify({ query, opts });
     if (this.queryCache.has(cacheKey)) {
       logger.debug("Cache hit for query");
-      return this.queryCache.get(cacheKey)!;
+      const cached = this.queryCache.get(cacheKey);
+      if (!cached) {
+        throw new Error('Cache entry not found');
+      }
+      return cached;
     }
     
     try {
@@ -136,12 +140,12 @@ export class IntelligenceLayer {
       
       // Check if vector store is available
       if (!this.vectorStore && this.storageEngine) {
-        this.vectorStore = await this.storageEngine.getVectorStore() || undefined;
+        this.vectorStore = this.storageEngine.getVectorStore() || undefined;
       }
       
       if (!this.vectorStore) {
         logger.warn("Vector store not available, falling back to SQL search");
-        return await this.fallbackSQLSearch(query, opts);
+        return this.fallbackSQLSearch(query, opts);
       }
       
       // Search for similar vectors
@@ -167,7 +171,7 @@ export class IntelligenceLayer {
       // Rerank if enabled
       let finalMemories = memories;
       if (this.config.retrieval.rerank && memories.length > 0) {
-        finalMemories = await this.rerankMemories(query, memories);
+        finalMemories = this.rerankMemories(query, memories);
       }
       
       // Limit to requested number
@@ -186,10 +190,11 @@ export class IntelligenceLayer {
       
     } catch (error) {
       logger.error("Failed to retrieve memories", error);
-      return await this.fallbackSQLSearch(query, opts);
+      return this.fallbackSQLSearch(query, opts);
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async buildContext(memories: RetrievedMemory[]): Promise<string> {
     if (!this.initialized) {
       throw new Error("Intelligence layer not initialized");
@@ -219,10 +224,10 @@ export class IntelligenceLayer {
     logger.info("Intelligence layer closed");
   }
 
-  private async rerankMemories(
+  private rerankMemories(
     query: string, 
     memories: RetrievedMemory[]
-  ): Promise<RetrievedMemory[]> {
+  ): RetrievedMemory[] {
     // Simple reranking based on metadata relevance
     // In production, use a cross-encoder model
     return memories.sort((a, b) => {
@@ -252,10 +257,10 @@ export class IntelligenceLayer {
     });
   }
 
-  private async fallbackSQLSearch(
+  private fallbackSQLSearch(
     query: string, 
-    options: any
-  ): Promise<RetrievedMemory[]> {
+    options: Record<string, unknown>
+  ): RetrievedMemory[] {
     if (!this.storageEngine) {
       logger.warn("No storage engine available for SQL fallback");
       return [];
@@ -263,9 +268,9 @@ export class IntelligenceLayer {
 
     try {
       // Fallback to keyword search in SQLite
-      const memories = await this.storageEngine.queryMemories({
-        ...options.filters,
-        limit: options.limit
+      const memories = this.storageEngine.queryMemories({
+        ...(options.filters as Record<string, string | Date | number | undefined>),
+        limit: options.limit as number
       });
       
       // Simple relevance scoring based on query terms
@@ -296,7 +301,7 @@ export class IntelligenceLayer {
         })
         .filter(m => m.score > 0)
         .sort((a, b) => b.score - a.score)
-        .slice(0, options.limit);
+        .slice(0, options.limit as number);
       
       // Cache SQL fallback results too
       const cacheKey = JSON.stringify({ query, options });

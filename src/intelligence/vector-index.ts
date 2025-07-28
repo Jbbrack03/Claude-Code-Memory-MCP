@@ -28,6 +28,7 @@ export class SimpleVectorIndex implements VectorIndex {
    * @param id Unique identifier for the vector
    * @param vector The vector to store
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async add(id: string, vector: number[]): Promise<void> {
     // Validate dimension consistency
     if (this.dimension === undefined) {
@@ -53,6 +54,7 @@ export class SimpleVectorIndex implements VectorIndex {
    * @param k Number of results to return
    * @returns Array of results sorted by similarity (descending)
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async search(query: number[], k: number): Promise<Array<{id: string; score: number}>> {
     if (this.vectors.size === 0) {
       return [];
@@ -81,6 +83,7 @@ export class SimpleVectorIndex implements VectorIndex {
    * Remove a vector from the index
    * @param id ID of the vector to remove
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async remove(id: string): Promise<void> {
     const deleted = this.vectors.delete(id);
     if (deleted) {
@@ -107,9 +110,14 @@ export class SimpleVectorIndex implements VectorIndex {
     let normB = 0;
     
     for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i]! * b[i]!;
-      normA += a[i]! * a[i]!;
-      normB += b[i]! * b[i]!;
+      const aVal = a[i];
+      const bVal = b[i];
+      if (aVal === undefined || bVal === undefined) {
+        throw new Error('Invalid vector: undefined values');
+      }
+      dotProduct += aVal * bVal;
+      normA += aVal * aVal;
+      normB += bVal * bVal;
     }
     
     normA = Math.sqrt(normA);
@@ -136,6 +144,6 @@ export function createVectorIndex(type: 'simple' = 'simple'): VectorIndex {
     case 'simple':
       return new SimpleVectorIndex();
     default:
-      throw new Error(`Unknown vector index type: ${type}`);
+      throw new Error(`Unknown vector index type: ${type as string}`);
   }
 }
