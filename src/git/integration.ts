@@ -113,5 +113,8 @@ export class GitIntegration {
     
     this.initialized = false;
     logger.info("Git integration closed");
+    
+    // Return resolved promise to satisfy async requirement
+    return Promise.resolve();
   }
 }

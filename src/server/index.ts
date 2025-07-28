@@ -8,6 +8,9 @@ import { HookSystem } from "../hooks/system.js";
 import { GitIntegration } from "../git/integration.js";
 import { IntelligenceLayer } from "../intelligence/layer.js";
 import { logger } from "../utils/logger.js";
+import { ErrorHandler } from "../utils/error-handler.js";
+import { HealthChecker } from "../utils/health-checker.js";
+import { GracefulDegradation } from "../utils/graceful-degradation.js";
 
 // Initialize server
 const server = new McpServer({
@@ -20,6 +23,7 @@ let storage: StorageEngine;
 let hooks: HookSystem;
 let git: GitIntegration;
 let intelligence: IntelligenceLayer;
+let healthChecker: HealthChecker;
 
 // Server initialization
 async function initialize() {
@@ -41,6 +45,17 @@ async function initialize() {
     // Initialize intelligence layer with storage reference
     intelligence = new IntelligenceLayer(config.intelligence, storage);
     await intelligence.initialize();
+
+    // Initialize health checker
+    healthChecker = new HealthChecker({
+      storage,
+      hooks,
+      git,
+      intelligence
+    });
+
+    // Setup error handlers
+    ErrorHandler.setupGlobalHandlers();
 
     // Register tools
     registerTools();
@@ -72,6 +87,11 @@ function registerTools() {
     async (args) => {
       const { eventType, content, metadata } = args;
       try {
+        // Check if memory capture is disabled
+        if (GracefulDegradation.isFeatureDisabled('memory_capture')) {
+          return GracefulDegradation.createDegradedResponse('memory_capture');
+        }
+
         const memory = await storage.captureMemory({
           eventType,
           content,
@@ -88,6 +108,13 @@ function registerTools() {
         };
       } catch (error) {
         logger.error("Failed to capture memory:", error);
+        
+        // Handle storage failure gracefully
+        if (error instanceof Error && error.message.includes('storage')) {
+          await GracefulDegradation.handleStorageFailure(error);
+          return GracefulDegradation.createDegradedResponse('memory_capture');
+        }
+        
         return {
           content: [{
             type: "text",
@@ -183,6 +210,11 @@ function registerTools() {
     async (args) => {
       const { query, limit, filters } = args;
       try {
+        // Check if context building is disabled
+        if (GracefulDegradation.isFeatureDisabled('context_building')) {
+          return GracefulDegradation.createDegradedResponse('context_building');
+        }
+
         // First retrieve relevant memories
         const memories = await intelligence.retrieveMemories(query, {
           limit,
@@ -200,10 +232,60 @@ function registerTools() {
         };
       } catch (error) {
         logger.error("Failed to build context:", error);
+        
+        // Handle intelligence failure gracefully
+        if (error instanceof Error && error.message.includes('intelligence')) {
+          await GracefulDegradation.handleIntelligenceFailure(error);
+          return GracefulDegradation.createDegradedResponse('context_building');
+        }
+        
         return {
           content: [{
             type: "text",
             text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
+          }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  // Health check tool
+  server.registerTool(
+    "health-check",
+    {
+      title: "Health Check",
+      description: "Check system health and component status",
+      inputSchema: {
+        detailed: z.boolean().optional().default(false)
+      }
+    },
+    async (args) => {
+      const { detailed } = args;
+      try {
+        if (detailed) {
+          const report = await healthChecker.checkHealth();
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify(report, null, 2)
+            }]
+          };
+        } else {
+          const quick = await healthChecker.quickCheck();
+          return {
+            content: [{
+              type: "text",
+              text: `System ${quick.healthy ? 'healthy' : 'unhealthy'}${quick.message ? ': ' + quick.message : ''}`
+            }]
+          };
+        }
+      } catch (error) {
+        logger.error("Health check failed:", error);
+        return {
+          content: [{
+            type: "text",
+            text: `Health check error: ${error instanceof Error ? error.message : "Unknown error"}`
           }],
           isError: true
         };

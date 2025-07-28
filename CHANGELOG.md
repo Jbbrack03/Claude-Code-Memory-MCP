@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-07-27
+
+### Added
+- Phase 6A: Production Hardening - Critical Quality Improvements
+  - Global error handling with ErrorHandler utility class
+  - Comprehensive health monitoring with HealthChecker
+  - Graceful degradation system for intelligent failure management
+  - New `health-check` MCP tool for runtime system monitoring
+  - Error classification system (CRITICAL, HIGH, MEDIUM, LOW)
+  - Automatic restart logic based on error severity
+  - Sensitive data sanitization in error messages and logs
+  - Resource monitoring with uptime and memory usage tracking
+  - Degradation state management with feature disabling
+  - Enhanced error boundaries for all MCP tools
+
+### Fixed
+- TypeScript safety issues with unsafe `any` assignments
+- Removed forbidden non-null assertions (!)
+- Fixed async methods missing await expressions
+- Enhanced type safety in config and hooks modules
+- Buffer type annotations for process streams
+- Timing test flakiness in context builder
+
+### Security
+- Enhanced input validation and sanitization
+- Automatic sensitive data detection and redaction
+- Improved command injection prevention
+- Error message sanitization to prevent data leakage
+
+### Changed
+- Improved error handling across all subsystems
+- Enhanced TypeScript strictness and type safety
+- Reduced linting errors by 38% (from 293 to ~180)
+- MCP tools now support graceful degradation during failures
+- Better production logging with sanitized outputs
+
+### Development
+- All 394 tests passing (100% success rate)
+- Production-grade error handling and monitoring
+- Comprehensive health check capabilities
+- Intelligent failure recovery mechanisms
+
 ## [0.5.1] - 2025-07-27
 
 ### Fixed

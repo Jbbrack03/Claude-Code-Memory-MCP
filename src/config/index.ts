@@ -170,7 +170,7 @@ function loadConfig() {
         cacheSize: process.env.SQLITE_CACHE_SIZE ? parseInt(process.env.SQLITE_CACHE_SIZE) : undefined
       },
       vector: {
-        provider: process.env.VECTOR_PROVIDER as any,
+        provider: process.env.VECTOR_PROVIDER as "chromadb" | "local" | undefined,
         path: process.env.VECTOR_PATH,
         dimension: process.env.VECTOR_DIMENSION ? parseInt(process.env.VECTOR_DIMENSION) : undefined
       },
@@ -198,7 +198,7 @@ function loadConfig() {
       sandbox: {
         enabled: process.env.SANDBOX_ENABLED !== "false",
         allowedCommands: process.env.SANDBOX_ALLOWED_COMMANDS?.split(","),
-        env: process.env.SANDBOX_ENV ? JSON.parse(process.env.SANDBOX_ENV) : undefined
+        env: process.env.SANDBOX_ENV ? JSON.parse(process.env.SANDBOX_ENV) as Record<string, string> : undefined
       }
     },
     git: {
@@ -255,7 +255,7 @@ function loadConfig() {
   };
 
   // Remove undefined values
-  const cleanConfig = JSON.parse(JSON.stringify(rawConfig));
+  const cleanConfig = JSON.parse(JSON.stringify(rawConfig)) as typeof rawConfig;
 
   // Parse and validate configuration
   return ConfigSchema.parse(cleanConfig);

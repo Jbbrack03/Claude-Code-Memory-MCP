@@ -22,13 +22,13 @@ export interface HookConfig {
 export interface HookEvent {
   type: string;
   tool?: string;
-  data: any;
+  data: Record<string, unknown>;
   timestamp: Date;
 }
 
 export interface HookResult {
   output?: string;
-  parsed?: any;
+  parsed?: unknown;
   error?: string;
   exitCode?: number;
   skipped?: boolean;
@@ -125,7 +125,10 @@ export class HookSystem {
           const env = this.buildEnvironment(event);
           
           // Execute hook
-          const execResult = await this.executor!.execute(hook.command, { context: env });
+          if (!this.executor) {
+            throw new Error("Hook executor not initialized");
+          }
+          const execResult = await this.executor.execute(hook.command, { context: env });
           
           // Parse output if needed
           let parsed;
@@ -133,8 +136,8 @@ export class HookSystem {
           if (hook.outputFormat === 'json' && execResult.stdout) {
             try {
               parsed = JSON.parse(execResult.stdout.trim());
-            } catch (error: any) {
-              parseError = error.message;
+            } catch (error: unknown) {
+              parseError = error instanceof Error ? error.message : String(error);
             }
           }
           
@@ -155,18 +158,18 @@ export class HookSystem {
         });
         
         results.push(result);
-      } catch (error: any) {
-        if (error.message === 'Circuit breaker is open') {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message === 'Circuit breaker is open') {
           results.push({
             skipped: true,
             reason: 'Circuit breaker open'
           });
-        } else if (error.exitCode !== undefined) {
+        } else if (typeof error === 'object' && error !== null && 'exitCode' in error) {
           // This is a thrown result object from a failed hook
-          results.push(error);
+          results.push(error as HookResult);
         } else {
           results.push({
-            error: error.message,
+            error: error instanceof Error ? error.message : String(error),
             exitCode: 1
           });
         }
