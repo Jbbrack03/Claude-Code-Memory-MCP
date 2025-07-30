@@ -214,7 +214,7 @@ export class CircuitBreaker {
         circuit.halfOpenAttempts = 0;
       }
       this.timers.delete(operationName);
-    }, this.config.resetTimeout);
+    }, this.config.resetTimeout).unref();
 
     this.timers.set(operationName, timer);
   }

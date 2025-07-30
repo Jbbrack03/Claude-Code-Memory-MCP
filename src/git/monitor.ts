@@ -269,7 +269,7 @@ export class GitMonitor extends EventEmitter {
       this.checkForChanges().catch(error => {
         logger.error("Error during periodic check", error);
       });
-    }, this.config.checkInterval);
+    }, this.config.checkInterval).unref();
   }
 
   stopWatching(): void {

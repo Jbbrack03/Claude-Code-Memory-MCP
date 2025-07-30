@@ -372,6 +372,36 @@ export class SQLiteDatabase {
     return transaction();
   }
 
+  getMemoriesByIds(ids: string[]): Memory[] {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    
+    if (ids.length === 0) {
+      return [];
+    }
+    
+    const placeholders = ids.map(() => '?').join(',');
+    const query = `
+      SELECT * FROM memories 
+      WHERE id IN (${placeholders})
+    `;
+    
+    const rows = this.db.prepare(query).all(...ids) as DatabaseRow[];
+    
+    return rows.map(row => ({
+      id: row.id,
+      eventType: row.event_type,
+      content: row.content,
+      metadata: row.metadata ? JSON.parse(row.metadata) as Record<string, unknown> : undefined,
+      timestamp: new Date(row.timestamp),
+      sessionId: row.session_id,
+      workspaceId: row.workspace_id || undefined,
+      gitBranch: row.git_branch || undefined,
+      gitCommit: row.git_commit || undefined
+    }));
+  }
+
   queryMemories(filters: {
     workspaceId?: string;
     sessionId?: string;

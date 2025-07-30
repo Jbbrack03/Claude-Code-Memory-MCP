@@ -1,6 +1,6 @@
 {
   "name": "claude-memory-mcp",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A defensive, Git-aware MCP server providing persistent memory for Claude Code sessions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -11,6 +11,7 @@ import { logger } from "../utils/logger.js";
 import { ErrorHandler } from "../utils/error-handler.js";
 import { HealthChecker } from "../utils/health-checker.js";
 import { GracefulDegradation } from "../utils/graceful-degradation.js";
+import { RateLimiter } from "../utils/rate-limiter.js";
 
 // Define metadata schema
 const metadataSchema = z.record(z.union([
@@ -34,6 +35,28 @@ let hooks: HookSystem;
 let git: GitIntegration;
 let intelligence: IntelligenceLayer;
 let healthChecker: HealthChecker;
+
+// Initialize rate limiters
+const captureMemoryLimiter = new RateLimiter({
+  maxRequests: 100,
+  windowMs: 60000, // 1 minute
+  keyPrefix: 'capture-memory',
+  slidingWindow: true
+});
+
+const retrieveMemoriesLimiter = new RateLimiter({
+  maxRequests: 100,
+  windowMs: 60000, // 1 minute
+  keyPrefix: 'retrieve-memories',
+  slidingWindow: true
+});
+
+const buildContextLimiter = new RateLimiter({
+  maxRequests: 100,
+  windowMs: 60000, // 1 minute
+  keyPrefix: 'build-context',
+  slidingWindow: true
+});
 
 // Server initialization
 async function initialize() {
@@ -97,6 +120,20 @@ function registerTools() {
     async (args) => {
       const { eventType, content, metadata } = args;
       try {
+        // Check rate limit
+        const sessionId = process.env.SESSION_ID || "default";
+        const rateLimitResult = await captureMemoryLimiter.checkLimit(sessionId);
+        
+        if (!rateLimitResult.allowed) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Rate limit exceeded. Please retry after ${rateLimitResult.retryAfter} seconds.`
+            }],
+            isError: true
+          };
+        }
+        
         // Check if memory capture is disabled
         if (GracefulDegradation.isFeatureDisabled('memory_capture')) {
           return GracefulDegradation.createDegradedResponse('memory_capture');
@@ -151,6 +188,20 @@ function registerTools() {
     async (args) => {
       const { query, limit, filters } = args;
       try {
+        // Check rate limit
+        const sessionId = process.env.SESSION_ID || "default";
+        const rateLimitResult = await retrieveMemoriesLimiter.checkLimit(sessionId);
+        
+        if (!rateLimitResult.allowed) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Rate limit exceeded. Please retry after ${rateLimitResult.retryAfter} seconds.`
+            }],
+            isError: true
+          };
+        }
+        
         const memories = await intelligence.retrieveMemories(query, {
           limit,
           filters
@@ -220,6 +271,20 @@ function registerTools() {
     async (args) => {
       const { query, limit, filters } = args;
       try {
+        // Check rate limit
+        const sessionId = process.env.SESSION_ID || "default";
+        const rateLimitResult = await buildContextLimiter.checkLimit(sessionId);
+        
+        if (!rateLimitResult.allowed) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Rate limit exceeded. Please retry after ${rateLimitResult.retryAfter} seconds.`
+            }],
+            isError: true
+          };
+        }
+        
         // Check if context building is disabled
         if (GracefulDegradation.isFeatureDisabled('context_building')) {
           return GracefulDegradation.createDegradedResponse('context_building');

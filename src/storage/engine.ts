@@ -131,7 +131,7 @@ export class StorageEngine {
     return storedMemory;
   }
 
-  queryMemories(filters: {
+  async queryMemories(filters: {
     workspaceId?: string;
     sessionId?: string;
     eventType?: string;
@@ -141,12 +141,60 @@ export class StorageEngine {
     limit?: number;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
-  } = {}): Memory[] {
+    semanticQuery?: string;
+  } = {}): Promise<Memory[]> {
     if (!this.initialized || !this.sqlite) {
       throw new Error("Storage engine not initialized");
     }
 
     logger.debug("Querying memories", filters);
+    
+    // If semantic query provided, use vector search
+    if (filters.semanticQuery && this.vectorStore && this.embeddingService) {
+      try {
+        // Generate embedding for query
+        const queryEmbedding = await this.embeddingService(filters.semanticQuery);
+        
+        // Search vector store
+        const searchFilter: Record<string, unknown> = {};
+        if (filters.workspaceId !== undefined) {
+          searchFilter.workspaceId = filters.workspaceId;
+        }
+        if (filters.sessionId !== undefined) {
+          searchFilter.sessionId = filters.sessionId;
+        }
+        if (filters.gitBranch !== undefined) {
+          searchFilter.gitBranch = filters.gitBranch;
+        }
+        
+        const vectorResults = await this.vectorStore.search(queryEmbedding, {
+          k: filters.limit || 10,
+          filter: Object.keys(searchFilter).length > 0 ? searchFilter : undefined
+        });
+        
+        // Get full memories from SQLite
+        const memoryIds = vectorResults.map(r => r.id);
+        if (memoryIds.length > 0) {
+          const sqliteMemories = this.sqlite.getMemoriesByIds(memoryIds);
+          // Convert to ensure all memories have an id
+          return sqliteMemories.map(m => ({
+            id: m.id || '',  // getMemoriesByIds only returns stored memories with IDs
+            eventType: m.eventType,
+            content: m.content,
+            metadata: m.metadata,
+            timestamp: m.timestamp,
+            sessionId: m.sessionId,
+            workspaceId: m.workspaceId,
+            gitBranch: m.gitBranch,
+            gitCommit: m.gitCommit
+          }));
+        }
+        return [];
+      } catch (error) {
+        logger.warn("Vector search failed, falling back to SQL", error);
+        // Fall through to SQL query
+      }
+    }
     
     // Query from SQLite
     const sqliteMemories = this.sqlite.queryMemories(filters);
@@ -163,8 +211,6 @@ export class StorageEngine {
       gitBranch: m.gitBranch,
       gitCommit: m.gitCommit
     }));
-    
-    // TODO: Apply vector similarity search if needed
     
     return memories;
   }

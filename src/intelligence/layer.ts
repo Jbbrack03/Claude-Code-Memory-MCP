@@ -145,7 +145,7 @@ export class IntelligenceLayer {
       
       if (!this.vectorStore) {
         logger.warn("Vector store not available, falling back to SQL search");
-        return this.fallbackSQLSearch(query, opts);
+        return await this.fallbackSQLSearch(query, opts);
       }
       
       // Search for similar vectors
@@ -190,7 +190,7 @@ export class IntelligenceLayer {
       
     } catch (error) {
       logger.error("Failed to retrieve memories", error);
-      return this.fallbackSQLSearch(query, opts);
+      return await this.fallbackSQLSearch(query, opts);
     }
   }
 
@@ -257,10 +257,10 @@ export class IntelligenceLayer {
     });
   }
 
-  private fallbackSQLSearch(
+  private async fallbackSQLSearch(
     query: string, 
     options: Record<string, unknown>
-  ): RetrievedMemory[] {
+  ): Promise<RetrievedMemory[]> {
     if (!this.storageEngine) {
       logger.warn("No storage engine available for SQL fallback");
       return [];
@@ -268,7 +268,7 @@ export class IntelligenceLayer {
 
     try {
       // Fallback to keyword search in SQLite
-      const memories = this.storageEngine.queryMemories({
+      const memories = await this.storageEngine.queryMemories({
         ...(options.filters as Record<string, string | Date | number | undefined>),
         limit: options.limit as number
       });
