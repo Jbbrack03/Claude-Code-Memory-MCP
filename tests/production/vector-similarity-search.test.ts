@@ -351,10 +351,6 @@ describe('Production Vector Similarity Search Tests', () => {
       expect(results.length).toBe(3);
       
       // More recent memories should generally rank higher for similar relevance
-      const timestamps = results.map(r => r.timestamp.getTime());
-      const isSortedByRecency = timestamps.every((t, i) => 
-        i === 0 || t <= timestamps[i - 1]!
-      );
       
       // Allow some flexibility as relevance also matters
       expect(results[0]?.content).toContain('authentication');

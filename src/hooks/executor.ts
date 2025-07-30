@@ -211,7 +211,7 @@ export class HookExecutor {
           if (!child.killed) {
             child.kill('SIGKILL');
           }
-        }, 1000);
+        }, 1000).unref();
       }, this.config.execution.timeout);
 
       child.stdout?.on('data', (data: Buffer) => {

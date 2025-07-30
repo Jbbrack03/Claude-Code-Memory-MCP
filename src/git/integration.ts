@@ -76,12 +76,13 @@ export class GitIntegration {
 
     const monitorState = await this.monitor.getCurrentState();
     
-    // TODO: Get remote tracking info (behind/ahead counts)
+    // Get remote tracking info
+    const remoteInfo = await this.monitor.getRemoteTrackingInfo();
     
     return {
       ...monitorState,
-      behind: 0,
-      ahead: 0
+      behind: remoteInfo.behind,
+      ahead: remoteInfo.ahead
     };
   }
 

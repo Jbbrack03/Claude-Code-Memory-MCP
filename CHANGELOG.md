@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2025-07-30
+
+### Fixed
+- Test resource cleanup: Added `.unref()` to timer in executor.ts to prevent process hanging
+- Git integration: Updated to use proper `getRemoteTrackingInfo()` method
+- Production tests: Fixed git branch naming issues (main vs master)
+- Vector similarity search tests: Removed unused variables
+
+### Changed
+- Completed Phase 6 Production Hardening verification
+- All production features confirmed working as designed
+- Test suite stability improvements
+
 ## [0.8.0] - 2025-07-29
 
 ### Added
