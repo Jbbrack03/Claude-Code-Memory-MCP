@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { GitMonitor } from "../../src/git/monitor.js";
 import { exec } from "child_process";
 import { promisify } from "util";

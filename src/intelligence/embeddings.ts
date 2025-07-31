@@ -1,4 +1,7 @@
-import { pipeline, Pipeline } from "@xenova/transformers";
+import { pipeline } from "@xenova/transformers";
+
+// Type for pipeline is dynamically created, so we define our own minimal type
+type Pipeline = (input: string | string[], options?: Record<string, unknown>) => Promise<{ data: Float32Array }>;
 
 // Constants for better maintainability
 const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';

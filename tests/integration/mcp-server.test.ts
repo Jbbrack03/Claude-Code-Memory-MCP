@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { StorageEngine } from "../../src/storage/engine.js";
 import { HookSystem, type HookEvent } from "../../src/hooks/system.js";
 import { GitIntegration } from "../../src/git/integration.js";

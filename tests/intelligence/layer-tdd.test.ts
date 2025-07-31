@@ -2,16 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals
 import { IntelligenceLayer, RetrievalOptions, RetrievedMemory } from "../../src/intelligence/layer.js";
 import type { Config } from "../../src/config/index.js";
 
-// Mock logger
-jest.mock("../../src/utils/logger.js", () => ({
-  createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn()
-  })
-}));
-
 describe('IntelligenceLayer - TDD Red Phase Tests', () => {
   let layer: IntelligenceLayer;
   let config: Config["intelligence"];

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "@jest/globals";
 import { HookExecutor } from "../../src/hooks/executor.js";
 import os from "os";
+import path from "path";
 
 describe('HookExecutor', () => {
   let executor: HookExecutor;
@@ -137,7 +138,7 @@ describe('HookExecutor', () => {
     it('should isolate PATH variable', async () => {
       // Given: Executor with custom PATH (including node location)
       const nodePath = process.execPath;
-      const nodeDir = require('path').dirname(nodePath);
+      const nodeDir = path.dirname(nodePath);
       executor = new HookExecutor({
         sandbox: {
           allowedCommands: ['node'],

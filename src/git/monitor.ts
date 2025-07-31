@@ -38,14 +38,16 @@ export class GitMonitor extends EventEmitter {
     isDirty: false
   };
   private checkIntervalId?: NodeJS.Timeout;
+  private execAsync: typeof execAsync;
 
-  constructor(config: GitMonitorConfig = {}) {
+  constructor(config: GitMonitorConfig = {}, execAsyncOverride?: typeof execAsync) {
     super();
     this.config = {
       autoDetect: config.autoDetect ?? true,
       cwd: config.cwd ?? process.cwd(),
       checkInterval: config.checkInterval ?? 5000 // 5 seconds
     };
+    this.execAsync = execAsyncOverride || execAsync;
   }
 
   async initialize(): Promise<void> {
@@ -85,7 +87,7 @@ export class GitMonitor extends EventEmitter {
 
   private async detectRepository(): Promise<boolean> {
     try {
-      const { stdout } = await execAsync('git rev-parse --show-toplevel', {
+      const { stdout } = await this.execAsync('git rev-parse --show-toplevel', {
         cwd: this.config.cwd
       });
       this.repositoryRoot = stdout.trim();
@@ -124,7 +126,7 @@ export class GitMonitor extends EventEmitter {
   private async getCurrentBranch(): Promise<{ name: string; detached: boolean }> {
     try {
       // Try to get branch name
-      const { stdout } = await execAsync('git branch --show-current', {
+      const { stdout } = await this.execAsync('git branch --show-current', {
         cwd: this.config.cwd
       });
       
@@ -135,7 +137,7 @@ export class GitMonitor extends EventEmitter {
       }
       
       // If empty, we might be in detached HEAD state
-      const { stdout: revParse } = await execAsync('git rev-parse --abbrev-ref HEAD', {
+      const { stdout: revParse } = await this.execAsync('git rev-parse --abbrev-ref HEAD', {
         cwd: this.config.cwd
       });
       
@@ -145,7 +147,7 @@ export class GitMonitor extends EventEmitter {
       };
     } catch (error) {
       // Fallback for older git versions
-      const { stdout } = await execAsync('git symbolic-ref --short HEAD 2>/dev/null || echo "HEAD"', {
+      const { stdout } = await this.execAsync('git symbolic-ref --short HEAD 2>/dev/null || echo "HEAD"', {
         cwd: this.config.cwd,
         shell: '/bin/bash'
       });
@@ -160,7 +162,7 @@ export class GitMonitor extends EventEmitter {
 
   private async getCurrentCommit(): Promise<string | undefined> {
     try {
-      const { stdout } = await execAsync('git rev-parse HEAD', {
+      const { stdout } = await this.execAsync('git rev-parse HEAD', {
         cwd: this.config.cwd
       });
       return stdout.trim();
@@ -172,7 +174,7 @@ export class GitMonitor extends EventEmitter {
 
   private async getRepositoryStatus(): Promise<{ isDirty: boolean; changes: GitState['changes'] }> {
     try {
-      const { stdout } = await execAsync('git status --porcelain', {
+      const { stdout } = await this.execAsync('git status --porcelain', {
         cwd: this.config.cwd
       });
       
@@ -287,12 +289,12 @@ export class GitMonitor extends EventEmitter {
   async getRemoteTrackingInfo(): Promise<{ ahead: number; behind: number }> {
     try {
       // Get ahead count
-      const { stdout: aheadOutput } = await execAsync('git rev-list --count @{upstream}..HEAD', {
+      const { stdout: aheadOutput } = await this.execAsync('git rev-list --count @{upstream}..HEAD', {
         cwd: this.repositoryRoot || this.config.cwd
       });
       
       // Get behind count  
-      const { stdout: behindOutput } = await execAsync('git rev-list --count HEAD..@{upstream}', {
+      const { stdout: behindOutput } = await this.execAsync('git rev-list --count HEAD..@{upstream}', {
         cwd: this.repositoryRoot || this.config.cwd
       });
       

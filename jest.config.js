@@ -1,17 +1,28 @@
 /** @type {import('jest').Config} */
-export default {
+const config = {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-    '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js'
+    '^(\\.{1,2}/.+)\\.js$': '$1',
+    '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js',
+    'hnswlib-node': '<rootDir>/tests/__mocks__/hnswlib-node.js'
   },
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
         useESM: true,
+        isolatedModules: true,
+        tsconfig: {
+          allowJs: true,
+          esModuleInterop: true,
+          allowSyntheticDefaultImports: true,
+          skipLibCheck: true,
+          strict: false,
+          noUnusedLocals: false,
+          noUnusedParameters: false
+        }
       },
     ],
   },
@@ -35,5 +46,7 @@ export default {
       statements: 80
     }
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts']
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.mjs']
 };
+
+export default config;

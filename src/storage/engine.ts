@@ -94,11 +94,18 @@ export class StorageEngine {
     if (this.embeddingService && this.shouldGenerateEmbedding(memory)) {
       try {
         const embedding = await this.embeddingService(memory.content);
-        const vectorId = await this.vectorStore.store(embedding, {
+        const metadata: Record<string, string> = {
           memoryId: storedMemory.id,
           eventType: memory.eventType,
           sessionId: memory.sessionId
-        });
+        };
+        if (memory.workspaceId !== undefined) {
+          metadata.workspaceId = memory.workspaceId;
+        }
+        if (memory.gitBranch !== undefined) {
+          metadata.gitBranch = memory.gitBranch;
+        }
+        const vectorId = await this.vectorStore.store(embedding, metadata);
         
         // Store vector mapping in SQLite
         this.sqlite.run(
@@ -150,7 +157,7 @@ export class StorageEngine {
     logger.debug("Querying memories", filters);
     
     // If semantic query provided, use vector search
-    if (filters.semanticQuery && this.vectorStore && this.embeddingService) {
+    if (filters.semanticQuery && filters.semanticQuery.trim() !== '' && this.vectorStore && this.embeddingService) {
       try {
         // Generate embedding for query
         const queryEmbedding = await this.embeddingService(filters.semanticQuery);
@@ -172,22 +179,35 @@ export class StorageEngine {
           filter: Object.keys(searchFilter).length > 0 ? searchFilter : undefined
         });
         
-        // Get full memories from SQLite
-        const memoryIds = vectorResults.map(r => r.id);
+        // Get full memories from SQLite - extract memoryId from metadata
+        const memoryIds = vectorResults
+          .map(r => r.metadata?.memoryId || r.metadata?.id)
+          .filter((id): id is string => typeof id === 'string' && id !== '');
         if (memoryIds.length > 0) {
           const sqliteMemories = this.sqlite.getMemoriesByIds(memoryIds);
-          // Convert to ensure all memories have an id
-          return sqliteMemories.map(m => ({
-            id: m.id || '',  // getMemoriesByIds only returns stored memories with IDs
-            eventType: m.eventType,
-            content: m.content,
-            metadata: m.metadata,
-            timestamp: m.timestamp,
-            sessionId: m.sessionId,
-            workspaceId: m.workspaceId,
-            gitBranch: m.gitBranch,
-            gitCommit: m.gitCommit
-          }));
+          
+          // Create a map for quick lookup
+          const memoryMap = new Map(sqliteMemories.map(m => [m.id, m]));
+          
+          // Return memories in the same order as vector results
+          const orderedMemories: Memory[] = [];
+          for (const memoryId of memoryIds) {
+            const memory = memoryMap.get(memoryId);
+            if (memory) {
+              orderedMemories.push({
+                id: memory.id || '',
+                eventType: memory.eventType,
+                content: memory.content,
+                metadata: memory.metadata,
+                timestamp: memory.timestamp,
+                sessionId: memory.sessionId,
+                workspaceId: memory.workspaceId,
+                gitBranch: memory.gitBranch,
+                gitCommit: memory.gitCommit
+              });
+            }
+          }
+          return orderedMemories;
         }
         return [];
       } catch (error) {
@@ -284,6 +304,15 @@ export class StorageEngine {
     
     this.initialized = false;
     logger.info("Storage engine closed");
+  }
+
+  // Test helper methods (for integration tests)
+  storeTestMemories(_memories: unknown[]): void {
+    throw new Error('Test memory storage not implemented');
+  }
+
+  simulateLargeDataset(_count: number): void {
+    throw new Error('Large dataset simulation not implemented');
   }
 
   private validateMemory(memory: Omit<Memory, "id">): void {

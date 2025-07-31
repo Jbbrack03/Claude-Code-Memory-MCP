@@ -1,19 +1,35 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { GitMonitor } from "../../src/git/monitor.js";
-import { exec } from "child_process";
 
-// Mock child_process module
-jest.mock("child_process");
+// Create a mock for exec that we'll inject
+const createMockExec = () => {
+  const mockExec = jest.fn();
+  const promisifiedExec = (cmd: string, options: any) => {
+    return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      mockExec(cmd, options, (err: any, stdout: any, stderr: any) => {
+        if (err) reject(err);
+        else resolve({ stdout, stderr });
+      });
+    });
+  };
+  return { mockExec, promisifiedExec };
+};
 
 describe('GitMonitor Remote Tracking', () => {
   let monitor: GitMonitor;
+  const { mockExec, promisifiedExec } = createMockExec();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Create monitor and inject the mocked execAsync
     monitor = new GitMonitor({
       autoDetect: true,
       checkInterval: 1000
     });
+    
+    // Override the internal execAsync with our mock
+    (monitor as any).execAsync = promisifiedExec;
   });
 
   afterEach(() => {
@@ -23,13 +39,13 @@ describe('GitMonitor Remote Tracking', () => {
   describe('getRemoteTrackingInfo', () => {
     it('should return ahead and behind counts when tracking branch exists', async () => {
       // Mock git commands
-      (exec as any).mockImplementation((cmd: string, _options: any, callback: any) => {
+      mockExec.mockImplementation((cmd: string, options: any, callback: any) => {
         if (cmd.includes('rev-list --count @{upstream}..HEAD')) {
-          callback(null, { stdout: '5\n', stderr: '' });
+          callback(null, '5\n', '');
         } else if (cmd.includes('rev-list --count HEAD..@{upstream}')) {
-          callback(null, { stdout: '3\n', stderr: '' });
+          callback(null, '3\n', '');
         } else {
-          callback(new Error('Unknown command'));
+          callback(new Error('Unknown command'), null, null);
         }
       });
 
@@ -43,8 +59,8 @@ describe('GitMonitor Remote Tracking', () => {
 
     it('should return zeros when no remote tracking branch configured', async () => {
       // Mock git commands to fail (no upstream)
-      (exec as any).mockImplementation((_cmd: string, _options: any, callback: any) => {
-        callback(new Error('fatal: no upstream configured'));
+      mockExec.mockImplementation((_cmd: string, _options: any, callback: any) => {
+        callback(new Error('fatal: no upstream configured'), null, null);
       });
 
       const result = await monitor.getRemoteTrackingInfo();
@@ -57,11 +73,11 @@ describe('GitMonitor Remote Tracking', () => {
 
     it('should handle zero counts correctly', async () => {
       // Mock git commands with zero counts
-      (exec as any).mockImplementation((cmd: string, _options: any, callback: any) => {
+      mockExec.mockImplementation((cmd: string, _options: any, callback: any) => {
         if (cmd.includes('rev-list --count')) {
-          callback(null, { stdout: '0\n', stderr: '' });
+          callback(null, '0\n', '');
         } else {
-          callback(new Error('Unknown command'));
+          callback(new Error('Unknown command'), null, null);
         }
       });
 
@@ -75,13 +91,13 @@ describe('GitMonitor Remote Tracking', () => {
 
     it('should handle large counts', async () => {
       // Mock git commands with large counts
-      (exec as any).mockImplementation((cmd: string, _options: any, callback: any) => {
+      mockExec.mockImplementation((cmd: string, _options: any, callback: any) => {
         if (cmd.includes('rev-list --count @{upstream}..HEAD')) {
-          callback(null, { stdout: '1234\n', stderr: '' });
+          callback(null, '1234\n', '');
         } else if (cmd.includes('rev-list --count HEAD..@{upstream}')) {
-          callback(null, { stdout: '5678\n', stderr: '' });
+          callback(null, '5678\n', '');
         } else {
-          callback(new Error('Unknown command'));
+          callback(new Error('Unknown command'), null, null);
         }
       });
 
@@ -98,29 +114,50 @@ describe('GitMonitor Remote Tracking', () => {
       (monitor as any).repositoryRoot = '/path/to/repo';
 
       let capturedCwd: string | undefined;
-      (exec as any).mockImplementation((_cmd: string, options: any, callback: any) => {
-        capturedCwd = options.cwd;
-        callback(null, { stdout: '1\n', stderr: '' });
+      mockExec.mockImplementation((cmd: string, options: any, callback: any) => {
+        if (options && typeof options === 'object') {
+          capturedCwd = options.cwd;
+        }
+        if (cmd.includes('rev-list --count @{upstream}..HEAD')) {
+          callback(null, '1\n', '');
+        } else if (cmd.includes('rev-list --count HEAD..@{upstream}')) {
+          callback(null, '0\n', '');
+        } else {
+          callback(new Error('Unknown command'), null, null);
+        }
       });
 
-      await monitor.getRemoteTrackingInfo();
+      const result = await monitor.getRemoteTrackingInfo();
 
       expect(capturedCwd).toBe('/path/to/repo');
+      expect(result).toEqual({ ahead: 1, behind: 0 });
     });
 
     it('should fall back to config cwd when repository root not set', async () => {
       const customCwd = '/custom/path';
       monitor = new GitMonitor({ cwd: customCwd });
+      
+      // Re-inject the mock after creating new monitor
+      (monitor as any).execAsync = promisifiedExec;
 
       let capturedCwd: string | undefined;
-      (exec as any).mockImplementation((_cmd: string, options: any, callback: any) => {
-        capturedCwd = options.cwd;
-        callback(null, { stdout: '1\n', stderr: '' });
+      mockExec.mockImplementation((cmd: string, options: any, callback: any) => {
+        if (options && typeof options === 'object') {
+          capturedCwd = options.cwd;
+        }
+        if (cmd.includes('rev-list --count @{upstream}..HEAD')) {
+          callback(null, '1\n', '');
+        } else if (cmd.includes('rev-list --count HEAD..@{upstream}')) {
+          callback(null, '0\n', '');
+        } else {
+          callback(new Error('Unknown command'), null, null);
+        }
       });
 
-      await monitor.getRemoteTrackingInfo();
+      const result = await monitor.getRemoteTrackingInfo();
 
       expect(capturedCwd).toBe(customCwd);
+      expect(result).toEqual({ ahead: 1, behind: 0 });
     });
   });
 });

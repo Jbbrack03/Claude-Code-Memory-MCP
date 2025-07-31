@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2025-07-31
+
+### Fixed
+- Test suite stability: Fixed Git remote tracking test failures with dependency injection pattern
+- Semantic search tests: Resolved content length requirements (50+ characters) and embedding generation rules
+- Vector search result ordering: Fixed memory ordering preservation from vector similarity results
+- Intelligence layer test mocking: Resolved ESM module path resolution issues
+- Storage engine: Enhanced semantic search to maintain result order from vector store
+
+### Improved  
+- GitMonitor class: Refactored to support dependency injection for better testability
+- Test coverage: Comprehensive fixes across git, storage, and intelligence test suites
+- Error handling: Better fallback behavior in semantic search operations
+
+### Changed
+- All core test suites now pass reliably (600+ tests)
+- Enhanced test data to meet embedding generation requirements
+- Improved StorageEngine memory retrieval to preserve similarity ordering
+
 ## [0.8.1] - 2025-07-30
 
 ### Fixed

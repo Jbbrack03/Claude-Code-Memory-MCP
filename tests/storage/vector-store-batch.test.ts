@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { VectorStore } from "../../src/storage/vector-store.js";
 import * as fs from "fs";
 import * as path from "path";

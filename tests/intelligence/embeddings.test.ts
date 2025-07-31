@@ -1,20 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { EmbeddingGenerator } from "../../src/intelligence/embeddings.js";
+import * as transformersModule from "@xenova/transformers";
 
 // Mock @xenova/transformers
 jest.mock("@xenova/transformers");
 
 describe('EmbeddingGenerator', () => {
   let generator: EmbeddingGenerator;
-  let mockPipeline: any;
+  let mockPipeline: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockPipeline = jest.fn();
     
     // Setup the mock for the transformers module
-    const transformers = require("@xenova/transformers") as any;
-    transformers.pipeline = jest.fn(() => Promise.resolve(mockPipeline));
+    const mockedPipeline = transformersModule.pipeline as jest.MockedFunction<typeof transformersModule.pipeline>;
+    mockedPipeline.mockResolvedValue(mockPipeline as any);
   });
 
   afterEach(async () => {
@@ -34,8 +35,7 @@ describe('EmbeddingGenerator', () => {
       await generator.initialize();
       
       // Then: Model is loaded with correct parameters
-      const transformers = require("@xenova/transformers") as any;
-      expect(transformers.pipeline).toHaveBeenCalledWith(
+      expect(transformersModule.pipeline).toHaveBeenCalledWith(
         'feature-extraction',
         'Xenova/all-MiniLM-L6-v2',
         expect.any(Object)
@@ -57,8 +57,7 @@ describe('EmbeddingGenerator', () => {
       await generator.initialize();
       
       // Then: Default model is loaded
-      const transformers = require("@xenova/transformers") as any;
-      expect(transformers.pipeline).toHaveBeenCalledWith(
+      expect(transformersModule.pipeline).toHaveBeenCalledWith(
         'feature-extraction',
         'Xenova/all-MiniLM-L6-v2',
         expect.any(Object)
@@ -89,10 +88,8 @@ describe('EmbeddingGenerator', () => {
 
     it('should throw if model loading fails', async () => {
       // Given: Model loading will fail
-      const transformers = require("@xenova/transformers") as any;
-      transformers.pipeline = jest.fn(() => Promise.reject(
-        new Error('Model not found')
-      ));
+      const mockedPipeline = transformersModule.pipeline as jest.MockedFunction<typeof transformersModule.pipeline>;
+      mockedPipeline.mockRejectedValue(new Error('Model not found'));
       
       generator = new EmbeddingGenerator({
         model: 'invalid/model'

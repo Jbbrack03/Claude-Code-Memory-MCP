@@ -1,3 +1,4 @@
-module.exports = {
-  pipeline: jest.fn()
-};
+import { jest } from '@jest/globals';
+
+export const pipeline = jest.fn();
+export default { pipeline };
