@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2025-07-31
+
+### Added
+- **Phase 7b QueryPlanner Advanced Features COMPLETE**: Comprehensive query analysis capabilities
+  - Boolean logic analysis with $and, $or, $not operators and nested query support
+  - Advanced filter analysis: range filters (timestamps, numeric, string size), geospatial filters (circle, rectangle, polygon), fuzzy matching filters
+  - Memory usage estimation and optimization hints for query planning
+  - Concurrent query planning with thread-safe operations and backpressure mechanisms
+  - Workspace analysis and multi-workspace query support
+  - History-based query optimization with execution cost tracking
+  - 40+ new QueryPlanner methods implementing sophisticated query analysis
+  - 55 comprehensive test cases covering all advanced query scenarios
+  - Performance requirements validation (<10ms boolean analysis, concurrent planning)
+
+### Enhanced
+- QueryPlanner now supports complex nested boolean logic with proper complexity analysis
+- Memory footprint estimation with 20% overhead calculation for realistic planning
+- High-load planning with batched processing and resource management
+- Geospatial query support for location-based filtering with multiple geometry types
+- Thread-safe query planning suitable for concurrent production workloads
+
 ## [0.8.2] - 2025-07-31
 
 ### Fixed
