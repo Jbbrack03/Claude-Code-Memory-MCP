@@ -341,7 +341,7 @@ export class QueryPlanner {
                 }
               });
             } else if (typeof value === 'object' && value !== null) {
-              analyzeObject(value, depth + 1);
+              analyzeObject(value as Record<string, unknown>, depth + 1);
             }
           } else {
             actualFilterCount++;
@@ -426,7 +426,7 @@ export class QueryPlanner {
                 }
               } else {
                 filterCount++;
-                analyzeRangeObject(value);
+                analyzeRangeObject(value as Record<string, unknown>);
               }
             }
           } else if (key === 'size' && typeof value === 'object' && value !== null) {
@@ -528,7 +528,7 @@ export class QueryPlanner {
               }
             } else if (key.includes('location') || key.includes('Location') || key === 'region') {
               // Recursively check nested location objects
-              analyzeGeospatialObject(value);
+              analyzeGeospatialObject(value as Record<string, unknown>);
             } else {
               filterCount++;
             }
@@ -626,7 +626,7 @@ export class QueryPlanner {
               totalFuzzyComplexity += complexity;
             } else {
               filterCount++;
-              analyzeFuzzyObject(value);
+              analyzeFuzzyObject(value as Record<string, unknown>);
             }
           } else {
             filterCount++;

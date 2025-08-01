@@ -517,8 +517,11 @@ describe('QueryPlanner', () => {
         }
       };
 
-      // This should fail initially as complex boolean logic isn't implemented
-      expect(() => planner.analyzeComplexityWithBooleanLogic(query)).toThrow('Boolean filter logic not implemented');
+      // Complex boolean logic is now implemented
+      const result = planner.analyzeComplexityWithBooleanLogic(query);
+      expect(result.type).toBe(QueryComplexity.COMPLEX);
+      expect(result.estimatedCost).toBeGreaterThan(0);
+      expect(result.reason).toContain('Boolean');
     });
 
     it('should handle range filters with multiple conditions', () => {
@@ -534,8 +537,11 @@ describe('QueryPlanner', () => {
         }
       };
 
-      // This should fail as advanced range filtering isn't implemented
-      expect(() => planner.analyzeRangeFilters(query)).toThrow('Advanced range filtering not implemented');
+      // Range filtering is now implemented
+      const result = planner.analyzeRangeFilters(query);
+      expect(result.type).toBeDefined();
+      expect(result.filterCount).toBeGreaterThan(0);
+      expect(result.reason).toContain('range');
     });
 
     it('should handle geospatial filters for location-based queries', () => {
@@ -551,8 +557,11 @@ describe('QueryPlanner', () => {
         }
       };
 
-      // This should fail as geospatial filtering isn't implemented
-      expect(() => planner.analyzeGeospatialFilters(query)).toThrow('Geospatial filtering not implemented');
+      // Geospatial filtering is now implemented
+      const result = planner.analyzeGeospatialFilters(query);
+      expect(result.type).toBeDefined();
+      expect(result.filterCount).toBeGreaterThan(0);
+      expect(result.reason).toContain('Geospatial');
     });
 
     it('should handle fuzzy matching filters', () => {
@@ -564,8 +573,11 @@ describe('QueryPlanner', () => {
         }
       };
 
-      // This should fail as fuzzy matching isn't implemented
-      expect(() => planner.analyzeFuzzyFilters(query)).toThrow('Fuzzy filtering not implemented');
+      // Fuzzy matching is now implemented
+      const result = planner.analyzeFuzzyFilters(query);
+      expect(result.type).toBeDefined();
+      expect(result.filterCount).toBeGreaterThan(0);
+      expect(result.reason).toContain('Fuzzy');
     });
   });
 
@@ -577,8 +589,10 @@ describe('QueryPlanner', () => {
         limit: 10000
       };
 
-      // This should fail as memory analysis isn't implemented
-      expect(() => planner.estimateMemoryUsage(query)).toThrow('Memory usage analysis not implemented');
+      // Memory analysis is now implemented
+      const result = planner.estimateMemoryUsage(query);
+      expect(result).toBeGreaterThan(0);
+      expect(result).toBeGreaterThan(1024); // Base memory + large result set
     });
 
     it('should estimate memory footprint for different query types', () => {
@@ -586,10 +600,15 @@ describe('QueryPlanner', () => {
       const filterQuery = { text: '', filters: { eventType: 'commit' } };
       const hybridQuery = { text: 'auth', filters: { eventType: 'commit' } };
 
-      // These should fail as memory footprint estimation isn't implemented
-      expect(() => planner.estimateMemoryFootprint(semanticQuery)).toThrow('Memory footprint estimation not implemented');
-      expect(() => planner.estimateMemoryFootprint(filterQuery)).toThrow('Memory footprint estimation not implemented');
-      expect(() => planner.estimateMemoryFootprint(hybridQuery)).toThrow('Memory footprint estimation not implemented');
+      // Memory footprint estimation is now implemented
+      const semanticResult = planner.estimateMemoryFootprint(semanticQuery);
+      const filterResult = planner.estimateMemoryFootprint(filterQuery);
+      const hybridResult = planner.estimateMemoryFootprint(hybridQuery);
+      
+      expect(semanticResult).toBeGreaterThan(0);
+      expect(filterResult).toBeGreaterThan(0);
+      expect(hybridResult).toBeGreaterThan(0);
+      expect(hybridResult).toBeGreaterThan(filterResult); // Hybrid uses more memory
     });
 
     it('should provide memory optimization recommendations', () => {
@@ -602,8 +621,11 @@ describe('QueryPlanner', () => {
         limit: 50000
       };
 
-      // This should fail as memory optimization isn't implemented
-      expect(() => planner.getMemoryOptimizationHints(query)).toThrow('Memory optimization hints not implemented');
+      // Memory optimization is now implemented
+      const hints = planner.getMemoryOptimizationHints(query);
+      expect(Array.isArray(hints)).toBe(true);
+      expect(hints.length).toBeGreaterThan(0);
+      expect(hints.some(h => h.includes('limit'))).toBe(true); // Should suggest reducing limit
     });
   });
 
@@ -615,18 +637,22 @@ describe('QueryPlanner', () => {
         { text: 'user management', filters: { project: 'backend' } }
       ];
 
-      // This should fail as concurrent planning isn't implemented
-      expect(() => planner.planQueriesConcurrently(queries)).toThrow('Concurrent query planning not implemented');
+      // Concurrent planning is now implemented
+      const results = await planner.planQueriesConcurrently(queries);
+      expect(results).toHaveLength(queries.length);
+      expect(results.every(r => r.queryType && r.estimatedTotalCost >= 0)).toBe(true);
     });
 
     it('should maintain thread safety during concurrent operations', () => {
-      // This should fail as thread-safe planning isn't implemented
-      expect(() => 
-        planner.createPlanThreadSafe({
-          text: 'query',
-          filters: { index: 1 }
-        })
-      ).toThrow('Thread-safe planning not implemented');
+      // Thread-safe planning is now implemented
+      const query = {
+        text: 'query',
+        filters: { index: 1 }
+      };
+      const result = planner.createPlanThreadSafe(query);
+      expect(result).toBeDefined();
+      expect(result.queryType).toBeDefined();
+      expect(result.estimatedTotalCost).toBeGreaterThanOrEqual(0);
     });
 
     it('should handle resource contention gracefully', async () => {
@@ -640,8 +666,10 @@ describe('QueryPlanner', () => {
         limit: 1000
       }));
 
-      // This should fail as resource contention handling isn't implemented
-      expect(() => planner.handleHighLoadPlanning(highLoadQueries)).toThrow('High load planning not implemented');
+      // High load planning is now implemented
+      const results = await planner.handleHighLoadPlanning(highLoadQueries);
+      expect(results).toHaveLength(highLoadQueries.length);
+      expect(results.every(r => r.queryType && r.estimatedTotalCost >= 0)).toBe(true);
     });
   });
 

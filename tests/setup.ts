@@ -3,5 +3,3 @@
 if (typeof jest !== 'undefined') {
   jest.setTimeout(10000);
 }
-
-export {};

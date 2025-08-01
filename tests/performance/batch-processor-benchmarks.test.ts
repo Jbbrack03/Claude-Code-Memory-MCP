@@ -22,7 +22,6 @@ describe('BatchProcessor Performance Benchmarks', () => {
       };
 
       processor = new BatchProcessor(
-        options,
         async (items: BatchItem[]): Promise<ProcessingResult[]> => {
           // Simulate fast processing
           await new Promise(resolve => setTimeout(resolve, 1));
@@ -30,10 +29,11 @@ describe('BatchProcessor Performance Benchmarks', () => {
             id: item.id,
             success: true
           }));
-        }
+        },
+        options
       );
 
-      await processor.start();
+      processor.start();
 
       const itemCount = 1000;
       const testItems: BatchItem[] = Array.from({ length: itemCount }, (_, i) => ({
@@ -45,11 +45,12 @@ describe('BatchProcessor Performance Benchmarks', () => {
       const startTime = performance.now();
 
       // Add all items to queue
-      const addPromises = testItems.map(item => processor.addItem(item));
-      await Promise.all(addPromises);
+      testItems.forEach(item => processor.add(item));
 
       // Wait for all items to be processed
-      await processor.flush();
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const endTime = performance.now();
       const totalTime = (endTime - startTime) / 1000; // Convert to seconds
@@ -68,19 +69,19 @@ describe('BatchProcessor Performance Benchmarks', () => {
 
       for (const batchSize of batchSizes) {
         const testProcessor = new BatchProcessor(
+          async (items: BatchItem[]): Promise<ProcessingResult[]> => {
+            await new Promise(resolve => setTimeout(resolve, 2));
+            return items.map(item => ({ id: item.id, success: true }));
+          },
           {
             batchSize,
             maxQueueSize: 5000,
             retryLimit: 2,
             processingInterval: 20
-          },
-          async (items: BatchItem[]): Promise<ProcessingResult[]> => {
-            await new Promise(resolve => setTimeout(resolve, 2));
-            return items.map(item => ({ id: item.id, success: true }));
           }
         );
 
-        await testProcessor.start();
+        testProcessor.start();
 
         const itemCount = 200;
         const items: BatchItem[] = Array.from({ length: itemCount }, (_, i) => ({
@@ -91,11 +92,12 @@ describe('BatchProcessor Performance Benchmarks', () => {
 
         const startTime = performance.now();
         
-        for (const item of items) {
-          await testProcessor.addItem(item);
-        }
+        items.forEach(item => testProcessor.add(item));
         
-        await testProcessor.flush();
+        // Wait for all items to be processed
+        while (testProcessor.getQueueSize() > 0 || testProcessor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
         const endTime = performance.now();
 
         const throughput = itemCount / ((endTime - startTime) / 1000);
@@ -136,7 +138,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const highVolumeCount = 10000;
       const startTime = performance.now();
@@ -150,7 +152,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
           data: { index: i + j, chunk: Math.floor(i / chunkSize) }
         }));
 
-        await Promise.all(chunk.map(item => processor.addItem(item)));
+        chunk.forEach(item => processor.add(item));
         
         // Brief pause to prevent queue overflow
         if (i % 2000 === 0) {
@@ -158,7 +160,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       const endTime = performance.now();
       const totalTime = (endTime - startTime) / 1000;
 
@@ -188,7 +193,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const enqueueTimes: number[] = [];
       const itemCount = 500;
@@ -202,7 +207,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         };
 
         const startTime = performance.now();
-        await processor.addItem(item);
+        processor.add(item);
         const endTime = performance.now();
         
         enqueueTimes.push(endTime - startTime);
@@ -217,7 +222,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       const p95Time = enqueueTimes[p95Index];
       expect(p95Time).toBeLessThan(50); // p95 should be under 50ms in test environment
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     });
 
     it('should handle queue near capacity efficiently', async () => {
@@ -237,13 +245,13 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const capacityTimes: number[] = [];
 
       // Fill queue to near capacity
       for (let i = 0; i < queueSize - 5; i++) {
-        await processor.addItem({
+        processor.add({
           id: `capacity-${i}`,
           type: 'capacity-test',
           data: { index: i }
@@ -255,7 +263,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         const startTime = performance.now();
         
         try {
-          await processor.addItem({
+          processor.add({
             id: `near-capacity-${i}`,
             type: 'capacity-test',
             data: { nearCapacity: true }
@@ -274,7 +282,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
         expect(avgCapacityTime).toBeLessThan(100); // Should remain reasonable near capacity in test environment
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     });
 
     it('should optimize queue operations for different item types', async () => {
@@ -299,7 +310,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const itemTypes = ['fast', 'medium', 'slow'];
       const typePerformance: Record<string, number[]> = {};
@@ -311,7 +322,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         for (let i = 0; i < 50; i++) {
           const startTime = performance.now();
           
-          await processor.addItem({
+          processor.add({
             id: `${type}-${i}`,
             type,
             data: { itemType: type }
@@ -322,7 +333,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
       // All types should have reasonable performance
       Object.values(typePerformance).forEach(times => {
@@ -353,7 +367,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const priorities = [1, 5, 3, 9, 2, 8, 4, 7, 6];
       const priorityTimes: number[] = [];
@@ -362,7 +376,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
       for (const priority of priorities) {
         const startTime = performance.now();
         
-        await processor.addItem({
+        processor.add({
           id: `priority-${priority}`,
           type: 'priority-test',
           data: { value: priority },
@@ -373,7 +387,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
         priorityTimes.push(endTime - startTime);
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
       // Priority operations should be fast
       const avgPriorityTime = priorityTimes.reduce((a, b) => a + b) / priorityTimes.length;
@@ -400,14 +417,14 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const itemCount = 1000;
       const startTime = performance.now();
 
       // Add items with random priorities
       const addPromises = Array.from({ length: itemCount }, (_, i) => 
-        processor.addItem({
+        processor.add({
           id: `load-priority-${i}`,
           type: 'priority-load',
           data: { index: i },
@@ -416,7 +433,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       );
 
       await Promise.all(addPromises);
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const endTime = performance.now();
       const totalTime = (endTime - startTime) / 1000;
@@ -451,14 +471,14 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const itemCount = 300;
       const startTime = performance.now();
 
       // Process items with expected failures
       const addPromises = Array.from({ length: itemCount }, (_, i) =>
-        processor.addItem({
+        processor.add({
           id: `error-recovery-${i}`,
           type: 'error-test',
           data: { attempt: 1 }
@@ -466,7 +486,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       );
 
       await Promise.all(addPromises);
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const endTime = performance.now();
       const totalTime = (endTime - startTime) / 1000;
@@ -508,21 +531,24 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const retryItemCount = 50;
       const retryStartTime = performance.now();
 
       // Add items that will require retries
       for (let i = 0; i < retryItemCount; i++) {
-        await processor.addItem({
+        processor.add({
           id: `retry-${i}`,
           type: 'retry-test',
           data: { requiresRetry: true }
         });
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const retryEndTime = performance.now();
       const retryTotalTime = (retryEndTime - retryStartTime) / 1000;
@@ -558,20 +584,23 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const isolationTestCount = 60;
       const isolationStartTime = performance.now();
 
       for (let i = 0; i < isolationTestCount; i++) {
-        await processor.addItem({
+        processor.add({
           id: `isolation-${i}`,
           type: 'isolation-test',
           data: { index: i }
         });
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const isolationEndTime = performance.now();
       const isolationTime = (isolationEndTime - isolationStartTime) / 1000;
@@ -605,14 +634,14 @@ describe('BatchProcessor Performance Benchmarks', () => {
       );
 
       const initialMemory = process.memoryUsage().heapUsed;
-      await processor.start();
+      processor.start();
 
       // Fill queue with large items
       const largeItemCount = 5000;
       const largeItemData = 'x'.repeat(1000); // 1KB per item
 
       for (let i = 0; i < largeItemCount; i++) {
-        await processor.addItem({
+        processor.add({
           id: `memory-test-${i}`,
           type: 'memory',
           data: { 
@@ -631,7 +660,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       }
 
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
       const finalMemory = process.memoryUsage().heapUsed;
       const totalMemoryIncrease = finalMemory - initialMemory;
@@ -660,14 +692,14 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       // Generate memory pressure
       const pressureItemCount = 1000;
       const pressureStartTime = performance.now();
 
       const pressurePromises = Array.from({ length: pressureItemCount }, (_, i) =>
-        processor.addItem({
+        processor.add({
           id: `pressure-${i}`,
           type: 'memory-pressure',
           data: { 
@@ -678,7 +710,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       );
 
       await Promise.all(pressurePromises);
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const pressureEndTime = performance.now();
       const pressureTime = (pressureEndTime - pressureStartTime) / 1000;
@@ -710,14 +745,14 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const concurrentAddCount = 500;
       const concurrentStartTime = performance.now();
 
       // Create concurrent add operations
       const concurrentPromises = Array.from({ length: concurrentAddCount }, (_, i) =>
-        processor.addItem({
+        processor.add({
           id: `concurrent-${i}`,
           type: 'concurrent-test',
           data: { 
@@ -728,7 +763,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       );
 
       await Promise.all(concurrentPromises);
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       
       const concurrentEndTime = performance.now();
       const concurrentTime = (concurrentEndTime - concurrentStartTime) / 1000;
@@ -760,7 +798,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
         }
       );
 
-      await processor.start();
+      processor.start();
 
       const threadCount = 10;
       const itemsPerThread = 50;
@@ -775,7 +813,7 @@ describe('BatchProcessor Performance Benchmarks', () => {
 
         // Add items from this "thread"
         for (const item of threadItems) {
-          await processor.addItem(item);
+          processor.add(item);
           // Small random delay to increase concurrency
           if (Math.random() < 0.1) {
             await new Promise(resolve => setTimeout(resolve, 1));
@@ -784,7 +822,10 @@ describe('BatchProcessor Performance Benchmarks', () => {
       });
 
       await Promise.all(threadPromises);
-      await processor.flush();
+      // Wait for all items to be processed
+      while (processor.getQueueSize() > 0 || processor.isProcessing()) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
 
       const expectedTotal = threadCount * itemsPerThread;
       expect(processingCounter).toBe(expectedTotal);

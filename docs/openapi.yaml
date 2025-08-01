@@ -1,0 +1,485 @@
+openapi: 3.0.3
+info:
+  title: Claude Code Memory MCP Server API
+  description: |
+    The Claude Code Memory MCP server provides persistent memory for Claude Code sessions.
+    It captures verified events through hooks, stores them with semantic indexing, and
+    injects relevant context when needed.
+  version: 0.9.0
+  contact:
+    name: Claude Code Memory Support
+    url: https://github.com/anthropics/claude-memory-mcp
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: stdio://
+    description: MCP stdio transport (default)
+
+tags:
+  - name: Memory Operations
+    description: Core memory capture and retrieval operations
+  - name: System Status
+    description: Health checks and system information
+  - name: Git Integration
+    description: Git repository state management
+
+paths:
+  /tools/capture-memory:
+    post:
+      tags:
+        - Memory Operations
+      summary: Capture a memory
+      description: Store a new memory with optional metadata and automatic embedding generation
+      operationId: captureMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaptureMemoryRequest'
+            examples:
+              fileWrite:
+                summary: File write event
+                value:
+                  eventType: file_write
+                  content: Updated user authentication logic in auth.ts
+                  metadata:
+                    file: src/auth.ts
+                    lines: 45
+                    workspace: my-project
+              codeReview:
+                summary: Code review event
+                value:
+                  eventType: code_review
+                  content: Reviewed authentication module for security vulnerabilities
+                  metadata:
+                    reviewer: alice
+                    rating: 8
+                    findings: 2
+      responses:
+        '200':
+          description: Memory captured successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+              example:
+                content:
+                  - type: text
+                    text: "Memory captured successfully (ID: mem_1234567890)"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+        '413':
+          description: Memory size exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              headers:
+                X-RateLimit-Limit:
+                  schema:
+                    type: integer
+                  example: 100
+                X-RateLimit-Remaining:
+                  schema:
+                    type: integer
+                  example: 0
+                X-RateLimit-Reset:
+                  schema:
+                    type: integer
+                  example: 1627849732
+
+  /tools/retrieve-memories:
+    post:
+      tags:
+        - Memory Operations
+      summary: Retrieve memories
+      description: Query memories with optional semantic search and filtering
+      operationId: retrieveMemories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrieveMemoriesRequest'
+            examples:
+              semanticSearch:
+                summary: Semantic search
+                value:
+                  query: authentication error handling
+                  limit: 5
+                  filters:
+                    eventType: file_write
+              timeRange:
+                summary: Time range query
+                value:
+                  query: bug fixes
+                  filters:
+                    startTime: "2024-08-01T00:00:00Z"
+                    endTime: "2024-08-01T23:59:59Z"
+      responses:
+        '200':
+          description: Memories retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+
+  /tools/build-context:
+    post:
+      tags:
+        - Memory Operations
+      summary: Build context from memories
+      description: Format retrieved memories into injectable context
+      operationId: buildContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrieveMemoriesRequest'
+      responses:
+        '200':
+          description: Context built successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+
+  /tools/git-state:
+    post:
+      tags:
+        - Git Integration
+      summary: Get Git repository state
+      description: Returns current branch, commit, and synchronization status
+      operationId: getGitState
+      responses:
+        '200':
+          description: Git state retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+              example:
+                content:
+                  - type: text
+                    text: "Git state:\n- Branch: main\n- Commit: abc123def\n- Clean: true\n- Remote: origin/main (up to date)"
+
+  /tools/health-check:
+    post:
+      tags:
+        - System Status
+      summary: Check system health
+      description: Get health status of all system components
+      operationId: healthCheck
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                detailed:
+                  type: boolean
+                  description: Return detailed component status
+                  default: false
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPResponse'
+
+  /resources/memory-stats:
+    get:
+      tags:
+        - System Status
+      summary: Get memory statistics
+      description: Returns storage statistics and memory distribution
+      operationId: getMemoryStats
+      responses:
+        '200':
+          description: Memory statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryStats'
+
+  /resources/config:
+    get:
+      tags:
+        - System Status
+      summary: Get current configuration
+      description: Returns sanitized server configuration (sensitive values removed)
+      operationId: getConfig
+      responses:
+        '200':
+          description: Configuration object
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Sanitized configuration
+
+components:
+  schemas:
+    CaptureMemoryRequest:
+      type: object
+      required:
+        - eventType
+        - content
+      properties:
+        eventType:
+          type: string
+          description: Type of event being captured
+          minLength: 1
+          examples:
+            - file_write
+            - code_review
+            - tool_use
+            - error
+        content:
+          type: string
+          description: Memory content to store
+          minLength: 1
+          maxLength: 104857600  # 100MB
+        metadata:
+          type: object
+          description: Additional metadata for the memory
+          additionalProperties: true
+          examples:
+            - file: src/auth.ts
+              lines: 45
+              author: alice
+
+    RetrieveMemoriesRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Search query (semantic or keyword)
+          minLength: 1
+        limit:
+          type: integer
+          description: Maximum number of results
+          minimum: 1
+          maximum: 100
+          default: 10
+        filters:
+          type: object
+          properties:
+            eventType:
+              type: string
+              description: Filter by event type
+            workspaceId:
+              type: string
+              description: Filter by workspace
+            sessionId:
+              type: string
+              description: Filter by session
+            startTime:
+              type: string
+              format: date-time
+              description: Start of time range
+            endTime:
+              type: string
+              format: date-time
+              description: End of time range
+            gitBranch:
+              type: string
+              description: Filter by Git branch
+          additionalProperties: false
+
+    MCPResponse:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: array
+          items:
+            type: object
+            required:
+              - type
+              - text
+            properties:
+              type:
+                type: string
+                enum: [text]
+                description: Content type
+              text:
+                type: string
+                description: Response content
+
+    MCPErrorResponse:
+      type: object
+      required:
+        - content
+        - isError
+      properties:
+        content:
+          type: array
+          items:
+            type: object
+            required:
+              - type
+              - text
+            properties:
+              type:
+                type: string
+                enum: [text]
+              text:
+                type: string
+                description: Error message
+        isError:
+          type: boolean
+          const: true
+
+    MemoryStats:
+      type: object
+      properties:
+        totalMemories:
+          type: integer
+          description: Total number of stored memories
+        totalSize:
+          type: integer
+          description: Total storage size in bytes
+        memoriesByType:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Memory count by event type
+        oldestMemory:
+          type: string
+          format: date-time
+          description: Timestamp of oldest memory
+        newestMemory:
+          type: string
+          format: date-time
+          description: Timestamp of newest memory
+        workspaceCount:
+          type: integer
+          description: Number of active workspaces
+        sessionCount:
+          type: integer
+          description: Number of active sessions
+        vectorIndexSize:
+          type: integer
+          description: Size of vector index
+        fileStoreSize:
+          type: integer
+          description: Size of file storage
+
+    Memory:
+      type: object
+      required:
+        - id
+        - eventType
+        - content
+        - timestamp
+        - sessionId
+        - workspaceId
+      properties:
+        id:
+          type: string
+          description: Unique memory identifier
+          pattern: ^mem_[a-zA-Z0-9]+$
+        eventType:
+          type: string
+          description: Type of event
+        content:
+          type: string
+          description: Memory content
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          description: Event timestamp
+        sessionId:
+          type: string
+          description: Session identifier
+        workspaceId:
+          type: string
+          description: Workspace identifier
+        gitBranch:
+          type: string
+          description: Git branch at time of capture
+        gitCommit:
+          type: string
+          description: Git commit hash
+        embedding:
+          type: array
+          items:
+            type: number
+          description: Vector embedding (384 dimensions)
+        fileRef:
+          type: string
+          description: Reference to file storage
+
+    GitState:
+      type: object
+      properties:
+        initialized:
+          type: boolean
+          description: Whether Git is initialized
+        branch:
+          type: string
+          description: Current branch name
+        commit:
+          type: string
+          description: Current commit hash
+        isDirty:
+          type: boolean
+          description: Whether working directory has changes
+        remote:
+          type: string
+          description: Remote tracking branch
+        behind:
+          type: integer
+          description: Commits behind remote
+        ahead:
+          type: integer
+          description: Commits ahead of remote
+
+  securitySchemes:
+    # MCP protocol doesn't use traditional auth, but this is for reference
+    MCPSession:
+      type: apiKey
+      in: header
+      name: X-MCP-Session-ID
+      description: Session identifier for workspace isolation

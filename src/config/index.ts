@@ -1,5 +1,5 @@
 import { z } from "zod";
-import dotenv from "dotenv";
+import * as dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
@@ -150,6 +150,36 @@ const ConfigSchema = z.object({
       enabled: z.boolean().default(true),
       algorithm: z.string().default("aes-256-gcm")
     })
+  }),
+
+  // Monitoring configuration
+  monitoring: z.object({
+    // Metrics collection
+    metrics: z.object({
+      enabled: z.boolean().default(true),
+      prefix: z.string().default("mcp_"),
+      collectDefaultMetrics: z.boolean().default(true),
+      collectionInterval: z.number().default(30000), // 30 seconds
+      defaultLabels: z.record(z.string()).default({})
+    }),
+
+    // HTTP endpoint
+    endpoint: z.object({
+      enabled: z.boolean().default(true),
+      port: z.number().min(1).max(65535).default(9090),
+      path: z.string().default("/metrics"),
+      
+      // Authentication
+      authentication: z.object({
+        enabled: z.boolean().default(false),
+        username: z.string().optional(),
+        password: z.string().optional()
+      }).optional(),
+
+      // Security
+      allowedIPs: z.array(z.string()).default([]),
+      timeout: z.number().default(5000) // 5 seconds
+    })
   })
 });
 
@@ -250,6 +280,27 @@ function loadConfig() {
       encryption: {
         enabled: process.env.ENCRYPTION_ENABLED !== "false",
         algorithm: process.env.ENCRYPTION_ALGORITHM
+      }
+    },
+    monitoring: {
+      metrics: {
+        enabled: process.env.METRICS_ENABLED !== "false",
+        prefix: process.env.METRICS_PREFIX,
+        collectDefaultMetrics: process.env.METRICS_COLLECT_DEFAULT !== "false",
+        collectionInterval: process.env.METRICS_COLLECTION_INTERVAL ? parseInt(process.env.METRICS_COLLECTION_INTERVAL) : undefined,
+        defaultLabels: process.env.METRICS_DEFAULT_LABELS ? JSON.parse(process.env.METRICS_DEFAULT_LABELS) as Record<string, string> : undefined
+      },
+      endpoint: {
+        enabled: process.env.METRICS_ENDPOINT_ENABLED !== "false",
+        port: process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT) : undefined,
+        path: process.env.METRICS_PATH,
+        authentication: process.env.METRICS_AUTH_ENABLED === "true" ? {
+          enabled: true,
+          username: process.env.METRICS_AUTH_USERNAME,
+          password: process.env.METRICS_AUTH_PASSWORD
+        } : undefined,
+        allowedIPs: process.env.METRICS_ALLOWED_IPS?.split(","),
+        timeout: process.env.METRICS_TIMEOUT ? parseInt(process.env.METRICS_TIMEOUT) : undefined
       }
     }
   };

@@ -6,7 +6,17 @@ const config = {
   moduleNameMapper: {
     '^(\\.{1,2}/.+)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js',
-    'hnswlib-node': '<rootDir>/tests/__mocks__/hnswlib-node.js'
+    'hnswlib-node': '<rootDir>/tests/__mocks__/hnswlib-node.js',
+    'prom-client': '<rootDir>/tests/__mocks__/prom-client.js',
+    '@opentelemetry/api': '<rootDir>/tests/__mocks__/@opentelemetry/api.js',
+    '@opentelemetry/sdk-node': '<rootDir>/tests/__mocks__/@opentelemetry/sdk-node.js',
+    '@opentelemetry/auto-instrumentations-node': '<rootDir>/tests/__mocks__/@opentelemetry/auto-instrumentations-node.js',
+    '@opentelemetry/resources': '<rootDir>/tests/__mocks__/@opentelemetry/resources.js',
+    '@opentelemetry/semantic-conventions': '<rootDir>/tests/__mocks__/@opentelemetry/semantic-conventions.js',
+    '@opentelemetry/exporter-trace-otlp-http': '<rootDir>/tests/__mocks__/@opentelemetry/exporter-trace-otlp-http.js',
+    '@opentelemetry/sdk-trace-base': '<rootDir>/tests/__mocks__/@opentelemetry/sdk-trace-base.js',
+    '@opentelemetry/exporter-jaeger': '<rootDir>/tests/__mocks__/@opentelemetry/exporter-jaeger.js',
+    '@opentelemetry/exporter-zipkin': '<rootDir>/tests/__mocks__/@opentelemetry/exporter-zipkin.js'
   },
   transform: {
     '^.+\\.tsx?$': [
@@ -46,7 +56,6 @@ const config = {
       statements: 80
     }
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.mjs']
 };
 
 export default config;

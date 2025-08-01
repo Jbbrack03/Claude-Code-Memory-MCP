@@ -60,6 +60,11 @@ export class IntelligenceLayer {
   }
 
   async initialize(): Promise<void> {
+    if (this.initialized) {
+      logger.info("Intelligence layer already initialized");
+      return;
+    }
+    
     logger.info("Initializing intelligence layer...");
     
     // Initialize embedding generator

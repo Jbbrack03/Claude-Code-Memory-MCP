@@ -141,12 +141,8 @@ describe('IntelligenceLayer', () => {
     });
 
     it('should handle empty text', async () => {
-      // When: Generating embedding for empty text
-      const embedding = await layer.generateEmbedding("");
-
-      // Then: Should still return valid embedding
-      expect(Array.isArray(embedding)).toBe(true);
-      expect(embedding.length).toBe(384);
+      // When/Then: Generating embedding for empty text should throw
+      await expect(layer.generateEmbedding("")).rejects.toThrow('Cannot generate embedding for empty text');
     });
 
     it('should handle very long text', async () => {

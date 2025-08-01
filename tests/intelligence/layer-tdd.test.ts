@@ -378,8 +378,8 @@ describe('IntelligenceLayer - TDD Red Phase Tests', () => {
       // When: Multiple initialization attempts
       await layer.initialize();
       
-      // Then: Second initialization should throw
-      await expect(layer.initialize()).rejects.toThrow('EmbeddingGenerator already initialized');
+      // Then: Second initialization should be a no-op (doesn't throw)
+      await expect(layer.initialize()).resolves.not.toThrow();
     });
 
     it('should provide meaningful error when not initialized', async () => {

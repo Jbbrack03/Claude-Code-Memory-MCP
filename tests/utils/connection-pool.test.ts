@@ -456,6 +456,9 @@ describe('ConnectionPool', () => {
       
       // Create waiting request
       const waitPromise = pool.acquire();
+      
+      // Give the request time to be added to the waiting queue
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Shutdown should cancel waiting request
       await pool.shutdown();
