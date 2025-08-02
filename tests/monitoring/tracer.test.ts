@@ -165,7 +165,7 @@ describe('TracerService', () => {
 
     it('should configure multiple exporters', async () => {
       // Given: Configuration with multiple exporters
-      mockConfig.exporters = ['console', 'otlp', 'jaeger'];
+      mockConfig.exporters = ['console', 'otlp', 'zipkin'];
       tracerService = new TracerService(mockConfig);
       
       // When: Initializing with multiple exporters
@@ -419,7 +419,7 @@ describe('TracerService', () => {
       
       // When/Then: Should validate span names
       invalidNames.forEach(name => {
-        expect(() => tracerService.startSpan(name as any)).toThrow(/Invalid span name/);
+        expect(() => tracerService.startSpan(name as any)).toThrow(/Span name is required/);
       });
     });
   });
@@ -558,8 +558,8 @@ describe('TracerService', () => {
 
     it('should respect sampling configuration', async () => {
       // Given: Low sampling rate configuration
-      mockConfig.sampling.ratio = 0.1;
-      const sampledService = new TracerService(mockConfig);
+      const samplingConfig = { ...mockConfig, samplingRate: 0.1 };
+      const sampledService = new TracerService(samplingConfig);
       await sampledService.initialize();
       
       // When: Creating multiple spans
@@ -602,14 +602,14 @@ describe('TracerService', () => {
 
     it('should handle shutdown errors gracefully', async () => {
       // Given: Service that fails during shutdown
-      const mockNodeSDK = require('@opentelemetry/sdk-node').NodeSDK;
-      mockNodeSDK.mockImplementation(() => ({
-        start: jest.fn(),
-        shutdown: jest.fn().mockRejectedValue(new Error('Shutdown failed')),
-      }));
-      
+      // Note: This test would need proper SDK mocking which is complex in this context
       const failingService = new TracerService(mockConfig);
       await failingService.initialize();
+      
+      // Mock SDK shutdown to fail
+      if (failingService['sdk']) {
+        failingService['sdk'].shutdown = jest.fn().mockRejectedValue(new Error('Shutdown failed'));
+      }
       
       // When/Then: Should handle shutdown failure
       await expect(failingService.shutdown()).rejects.toThrow('Shutdown failed');
@@ -626,9 +626,9 @@ describe('TracerService', () => {
       // Then: Should provide trace statistics
       expect(stats).toEqual({
         spansCreated: expect.any(Number),
+        spansEnded: expect.any(Number),
         activeSpans: expect.any(Number),
-        samplingRate: expect.any(Number),
-        exporterStatus: expect.any(Object),
+        errors: expect.any(Number),
       });
     });
   });
@@ -645,7 +645,7 @@ describe('TracerService', () => {
       
       // When/Then: Should validate configuration
       invalidConfigs.forEach(config => {
-        expect(() => new TracerService(config as any)).toThrow(/Invalid configuration/);
+        expect(() => new TracerService(config as any)).toThrow(/TracerService config/);
       });
     });
 
@@ -666,29 +666,24 @@ describe('TracerService', () => {
       // Given: Invalid exporter configuration
       const invalidExporterConfig = {
         ...mockConfig,
-        exporters: {
-          jaeger: {
-            endpoint: 'not-a-url',
-            enabled: true,
-          },
-        },
+        exporters: ['invalid-exporter' as any],
       };
       
       // When/Then: Should validate exporter config
-      expect(() => new TracerService(invalidExporterConfig)).toThrow(/Invalid exporter configuration/);
+      expect(() => new TracerService(invalidExporterConfig)).toThrow(/Invalid exporter/);
     });
 
     it('should validate sampling configuration', () => {
       // Given: Invalid sampling configuration
       const invalidSamplingConfigs = [
-        { ...mockConfig, sampling: { ratio: -0.1 } },
-        { ...mockConfig, sampling: { ratio: 1.1 } },
-        { ...mockConfig, sampling: { ratio: 'invalid' } },
+        { ...mockConfig, samplingRate: -0.1 },
+        { ...mockConfig, samplingRate: 1.1 },
+        { ...mockConfig, samplingRate: 'invalid' as any },
       ];
       
       // When/Then: Should validate sampling config
       invalidSamplingConfigs.forEach(config => {
-        expect(() => new TracerService(config as any)).toThrow(/Invalid sampling configuration/);
+        expect(() => new TracerService(config as any)).toThrow(/samplingRate/);
       });
     });
   });

@@ -23,7 +23,6 @@ const config = {
       'ts-jest',
       {
         useESM: true,
-        isolatedModules: true,
         tsconfig: {
           allowJs: true,
           esModuleInterop: true,

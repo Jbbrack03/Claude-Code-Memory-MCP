@@ -74,6 +74,52 @@ class Gauge {
   }
 }
 
+class Summary {
+  constructor() {
+    return {
+      observe: () => {},
+      reset: () => {},
+      get: () => {},
+      labels: () => this,
+      startTimer: () => () => {}
+    };
+  }
+}
+
+class Registry {
+  constructor() {
+    this._cleared = false;
+    this._prefix = 'test';
+    this.metrics = () => {
+      if (this._cleared) return Promise.resolve('');
+      // Return a mock that includes metric names based on prefix
+      return Promise.resolve(`# Mock metrics
+# HELP ${this._prefix}_memory_captures_total Total number of memory capture operations
+# TYPE ${this._prefix}_memory_captures_total counter
+${this._prefix}_memory_captures_total{event_type="test",status="success"} 1
+
+# HELP ${this._prefix}_operation_duration_seconds Duration of operations in seconds
+# TYPE ${this._prefix}_operation_duration_seconds histogram
+${this._prefix}_operation_duration_seconds_bucket{le="0.005"} 0
+
+# HELP ${this._prefix}_memory_usage_bytes Current memory usage in bytes
+# TYPE ${this._prefix}_memory_usage_bytes gauge
+${this._prefix}_memory_usage_bytes{type="heap"} 1024`);
+    };
+    this.resetMetrics = () => { this._cleared = true; };
+    this.setDefaultLabels = (labels) => {
+      // Extract prefix from labels if available
+      if (labels && labels.prefix) {
+        this._prefix = labels.prefix;
+      }
+    };
+    this.clear = () => { this._cleared = true; };
+    this.getSingleMetric = () => null;
+    this.registerMetric = () => {};
+    this.getMetricsAsJSON = () => [];
+  }
+}
+
 const register = {
   clear: () => {},
   metrics: () => Promise.resolve('# Mock metrics'),
@@ -84,4 +130,4 @@ const register = {
 
 const collectDefaultMetrics = () => {};
 
-export { Counter, Histogram, Gauge, register, collectDefaultMetrics };
+export { Counter, Histogram, Gauge, Summary, Registry, register, collectDefaultMetrics };

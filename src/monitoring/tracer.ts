@@ -1,11 +1,11 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { trace, Tracer, Span, SpanKind, SpanStatusCode, context, Context, propagation } from '@opentelemetry/api';
+import { trace, Tracer, Span, SpanKind, SpanStatusCode, context, Context, propagation, AttributeValue } from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { ConsoleSpanExporter, BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
+// import { JaegerExporter } from '@opentelemetry/exporter-jaeger'; // Removed - using OTLP instead
 import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
 import { createLogger } from '../utils/logger.js';
 
@@ -15,7 +15,7 @@ export interface TracerConfig {
   serviceName: string;
   enabled?: boolean;
   endpoint?: string;
-  exporters?: Array<'otlp' | 'console' | 'jaeger' | 'zipkin'>;
+  exporters?: Array<'otlp' | 'console' | 'zipkin'>;
   samplingRate?: number;
   environment?: string;
   version?: string;
@@ -23,7 +23,7 @@ export interface TracerConfig {
 
 export interface SpanOptions {
   kind?: SpanKind;
-  attributes?: Record<string, any>;
+  attributes?: Record<string, AttributeValue>;
   parent?: Span;
 }
 
@@ -58,7 +58,7 @@ export class TracerService {
       environment: config.environment || 'development',
       version: config.version || '0.0.0'
     };
-    this.enabled = this.config.enabled;
+    this.enabled = this.config.enabled ?? true;
   }
 
   private validateConfig(config: TracerConfig): void {
@@ -72,7 +72,7 @@ export class TracerService {
       throw new Error('TracerService config.samplingRate must be between 0 and 1');
     }
     if (config.exporters) {
-      const validExporters = ['otlp', 'console', 'jaeger', 'zipkin'];
+      const validExporters = ['otlp', 'console', 'zipkin'];
       const exportersArray = Array.isArray(config.exporters) ? config.exporters : [config.exporters];
       for (const exporter of exportersArray) {
         if (!validExporters.includes(exporter)) {
@@ -82,22 +82,22 @@ export class TracerService {
     }
   }
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     if (!this.enabled) {
       logger.debug('TracerService is disabled, skipping initialization');
       this.initialized = true; // Mark as initialized even when disabled
-      return;
+      return Promise.resolve();
     }
 
     if (this.initialized) {
-      return;
+      return Promise.resolve();
     }
 
     try {
       const resource = new Resource({
         [SemanticResourceAttributes.SERVICE_NAME]: this.config.serviceName,
-        [SemanticResourceAttributes.SERVICE_VERSION]: this.config.version!,
-        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: this.config.environment!
+        [SemanticResourceAttributes.SERVICE_VERSION]: this.config.version ?? '1.0.0',
+        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: this.config.environment ?? 'development'
       });
 
       const spanProcessors = this.createSpanProcessors();
@@ -114,13 +114,14 @@ export class TracerService {
         ]
       });
 
-      await this.sdk.start();
+      this.sdk.start();
       this.tracer = trace.getTracer(this.config.serviceName, this.config.version);
       this.initialized = true;
       logger.info('TracerService initialized successfully');
+      return Promise.resolve();
     } catch (error) {
       logger.error('Failed to initialize TracerService', error);
-      throw error;
+      return Promise.reject(error);
     }
   }
 
@@ -138,11 +139,11 @@ export class TracerService {
         case 'console':
           processors.push(new BatchSpanProcessor(new ConsoleSpanExporter()));
           break;
-        case 'jaeger':
-          processors.push(new BatchSpanProcessor(new JaegerExporter({
-            endpoint: this.config.endpoint || 'http://localhost:14268/api/traces'
-          })));
-          break;
+        // case 'jaeger': // Removed - using OTLP instead
+        //   processors.push(new BatchSpanProcessor(new JaegerExporter({
+        //     endpoint: this.config.endpoint || 'http://localhost:14268/api/traces'
+        //   })));
+        //   break;
         case 'zipkin':
           processors.push(new BatchSpanProcessor(new ZipkinExporter({
             url: this.config.endpoint || 'http://localhost:9411/api/v2/spans'
@@ -195,7 +196,7 @@ export class TracerService {
     }
 
     try {
-      const spanOptions: any = {
+      const spanOptions: { kind: SpanKind; attributes?: Record<string, AttributeValue> } = {
         kind: options?.kind || SpanKind.INTERNAL
       };
 
@@ -204,11 +205,13 @@ export class TracerService {
       }
 
       let span: Span;
-      if (options?.parent) {
+      if (options?.parent && this.tracer) {
         const ctx = trace.setSpan(context.active(), options.parent);
-        span = this.tracer!.startSpan(name, spanOptions, ctx);
+        span = this.tracer.startSpan(name, spanOptions as SpanOptions, ctx);
+      } else if (this.tracer) {
+        span = this.tracer.startSpan(name, spanOptions as SpanOptions);
       } else {
-        span = this.tracer!.startSpan(name, spanOptions);
+        throw new Error('Tracer not initialized');
       }
 
       this.activeSpans.add(span);
@@ -337,7 +340,7 @@ export class TracerService {
     }
   }
 
-  addEvent(span: Span, name: string, attributes?: Record<string, any>): void {
+  addEvent(span: Span, name: string, attributes?: Record<string, AttributeValue>): void {
     if (!span) {
       logger.warn('Cannot add event: span is null');
       return;

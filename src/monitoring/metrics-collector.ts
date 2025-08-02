@@ -271,7 +271,7 @@ export class MetricsCollector {
     }
 
     try {
-      return this.hookDurationHistogram.labels(hookType, status).startTimer();
+      return this.hookDurationHistogram.labels(hookType, status || 'unknown').startTimer();
     } catch (error) {
       return () => {};
     }
@@ -327,7 +327,7 @@ export class MetricsCollector {
     return register.metrics();
   }
 
-  getMetricsAsJSON(): any {
+  getMetricsAsJSON(): unknown {
     if (!this.enabled) {
       return [];
     }

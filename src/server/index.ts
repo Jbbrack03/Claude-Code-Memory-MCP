@@ -9,9 +9,10 @@ import { GitIntegration } from "../git/integration.js";
 import { IntelligenceLayer } from "../intelligence/layer.js";
 import { logger } from "../utils/logger.js";
 import { ErrorHandler } from "../utils/error-handler.js";
-import { HealthChecker } from "../utils/health-checker.js";
+// import { HealthChecker } from "../utils/health-checker.js"; // Using monitoring system health checks instead
 import { GracefulDegradation } from "../utils/graceful-degradation.js";
 import { RateLimiter } from "../utils/rate-limiter.js";
+import { MonitoringSystem } from "../monitoring/index.js";
 
 // Define metadata schema
 const metadataSchema = z.record(z.union([
@@ -34,7 +35,8 @@ let storage: StorageEngine;
 let hooks: HookSystem;
 let git: GitIntegration;
 let intelligence: IntelligenceLayer;
-let healthChecker: HealthChecker;
+// let healthChecker: HealthChecker; // Unused for now
+let monitoring: MonitoringSystem;
 
 // Initialize rate limiters
 const captureMemoryLimiter = new RateLimiter({
@@ -63,6 +65,29 @@ async function initialize() {
   try {
     logger.info("Initializing Claude Memory MCP Server...");
 
+    // Initialize monitoring system first
+    monitoring = new MonitoringSystem({
+      metrics: {
+        enabled: config.monitoring.endpoint.enabled,
+        prefix: config.monitoring.metrics.prefix,
+        port: config.monitoring.endpoint.port
+      },
+      tracing: {
+        enabled: config.monitoring.tracing.enabled,
+        serviceName: config.monitoring.tracing.serviceName,
+        endpoint: config.monitoring.tracing.endpoint
+      },
+      healthChecks: {
+        enabled: config.monitoring.healthChecks.enabled,
+        interval: config.monitoring.healthChecks.interval
+      },
+      alerting: {
+        enabled: config.monitoring.alerting.enabled,
+        checkInterval: config.monitoring.alerting.checkInterval
+      }
+    });
+    await monitoring.initialize();
+
     // Initialize storage engine
     storage = new StorageEngine(config.storage);
     await storage.initialize();
@@ -80,12 +105,16 @@ async function initialize() {
     await intelligence.initialize();
 
     // Initialize health checker
-    healthChecker = new HealthChecker({
-      storage,
-      hooks,
-      git,
-      intelligence
-    });
+    // healthChecker = new HealthChecker({
+    //   storage,
+    //   hooks,
+    //   git,
+    //   intelligence
+    // }); // Using monitoring system health checks instead
+
+    // Integrate monitoring with subsystems
+    monitoring.integrateWithStorage(storage);
+    monitoring.integrateWithHooks(hooks);
 
     // Setup error handlers
     ErrorHandler.setupGlobalHandlers();
@@ -119,57 +148,89 @@ function registerTools() {
     },
     async (args) => {
       const { eventType, content, metadata } = args;
-      try {
-        // Check rate limit
-        const sessionId = process.env.SESSION_ID || "default";
-        const rateLimitResult = await captureMemoryLimiter.checkLimit(sessionId);
-        
-        if (!rateLimitResult.allowed) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Rate limit exceeded. Please retry after ${rateLimitResult.retryAfter} seconds.`
-            }],
-            isError: true
-          };
-        }
-        
-        // Check if memory capture is disabled
-        if (GracefulDegradation.isFeatureDisabled('memory_capture')) {
-          return GracefulDegradation.createDegradedResponse('memory_capture');
-        }
+      const sessionId = process.env.SESSION_ID || "default";
+      const workspaceId = "default"; // git?.getCurrentWorkspace() || "unknown"; // Method doesn't exist yet
+      
+      return await monitoring.getInstrumentation().traceMemoryCapture(
+        eventType,
+        workspaceId,
+        async () => {
+          try {
+            // Record operation start
+            monitoring.getMetrics().recordMemoryCapture(eventType, 'success', workspaceId);
+            
+            // Check rate limit
+            const rateLimitResult = await captureMemoryLimiter.checkLimit(sessionId);
+            
+            if (!rateLimitResult.allowed) {
+              monitoring.getMetrics().recordRateLimitExceeded('capture-memory', workspaceId);
+              monitoring.getLogger().logRateLimitEvent('capture-memory', workspaceId, 'exceeded', {
+                retryAfter: rateLimitResult.retryAfter
+              });
+              
+              return {
+                content: [{
+                  type: "text" as const,
+                  text: `Rate limit exceeded. Please retry after ${rateLimitResult.retryAfter} seconds.`
+                }],
+                isError: true
+              };
+            }
+            
+            // Check if memory capture is disabled
+            if (GracefulDegradation.isFeatureDisabled('memory_capture')) {
+              return GracefulDegradation.createDegradedResponse('memory_capture');
+            }
 
-        const memory = await storage.captureMemory({
-          eventType,
-          content,
-          metadata,
-          timestamp: new Date(),
-          sessionId: process.env.SESSION_ID || "default"
-        });
+            const timer = monitoring.getMetrics().startTimer('memory_capture');
+            
+            const memory = await storage.captureMemory({
+              eventType,
+              content,
+              metadata,
+              timestamp: new Date(),
+              sessionId: sessionId
+            });
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Memory captured: ${memory.id}`
-          }]
-        };
-      } catch (error) {
-        logger.error("Failed to capture memory:", error);
-        
-        // Handle storage failure gracefully
-        if (error instanceof Error && error.message.includes('storage')) {
-          GracefulDegradation.handleStorageFailure(error);
-          return GracefulDegradation.createDegradedResponse('memory_capture');
+            timer.end('success');
+            
+            monitoring.getLogger().logMemoryOperation('capture', 'success', {
+              workspaceId,
+              eventType
+            });
+
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Memory captured: ${memory.id}`
+              }]
+            };
+          } catch (error) {
+            monitoring.getMetrics().recordMemoryCapture(eventType, 'error', workspaceId);
+            monitoring.getMetrics().recordError('memory_capture', error instanceof Error ? error.name : 'unknown');
+            
+            monitoring.getLogger().logMemoryOperation('capture', 'error', {
+              workspaceId,
+              eventType,
+              error: error instanceof Error ? error : new Error('Unknown error')
+            });
+            
+            // Handle storage failure gracefully
+            if (error instanceof Error && error.message.includes('storage')) {
+              GracefulDegradation.handleStorageFailure(error);
+              return GracefulDegradation.createDegradedResponse('memory_capture');
+            }
+            
+            return {
+              content: [{
+                type: "text" as const,
+                text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
+              }],
+              isError: true
+            };
+          }
         }
-        
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`
-          }],
-          isError: true
-        };
-      }
+      );
     }
   );
 
@@ -339,7 +400,8 @@ function registerTools() {
       const { detailed } = args;
       try {
         if (detailed) {
-          const report = await healthChecker.checkHealth();
+          // Use the monitoring system's comprehensive health check
+          const report = await monitoring.getHealthCheck().performHealthCheck();
           return {
             content: [{
               type: "text" as const,
@@ -347,16 +409,19 @@ function registerTools() {
             }]
           };
         } else {
-          const quick = await healthChecker.quickCheck();
+          // Use the monitoring system's quick status check
+          const quick = await monitoring.getHealthCheck().getQuickStatus();
           return {
             content: [{
               type: "text" as const,
-              text: `System ${quick.healthy ? 'healthy' : 'unhealthy'}${quick.message ? ': ' + quick.message : ''}`
+              text: `System ${quick.status} - Uptime: ${Math.round(quick.uptime / 1000)}s - Memory: ${Math.round(quick.memory / 1024 / 1024)}MB`
             }]
           };
         }
       } catch (error) {
-        logger.error("Health check failed:", error);
+        monitoring.getLogger().error("Health check failed", error instanceof Error ? error : new Error(String(error)));
+        monitoring.getMetrics().recordError('health_check', error instanceof Error ? error.name : 'unknown');
+        
         return {
           content: [{
             type: "text" as const,
@@ -465,12 +530,22 @@ async function main() {
 // Cleanup function
 async function cleanup() {
   try {
+    monitoring?.getLogger().logSystemEvent('shutdown', 'start');
+    
     await storage?.close();
     hooks?.close();
     await git?.close();
     await intelligence?.close();
+    
+    // Shutdown monitoring system last
+    await monitoring?.shutdown();
+    
+    logger.info("Cleanup completed successfully");
   } catch (error) {
     logger.error("Error during cleanup:", error);
+    monitoring?.getLogger().logSystemEvent('shutdown', 'error', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
 

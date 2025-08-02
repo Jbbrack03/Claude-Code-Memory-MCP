@@ -157,7 +157,7 @@ const ConfigSchema = z.object({
     // Metrics collection
     metrics: z.object({
       enabled: z.boolean().default(true),
-      prefix: z.string().default("mcp_"),
+      prefix: z.string().default("claude_memory"),
       collectDefaultMetrics: z.boolean().default(true),
       collectionInterval: z.number().default(30000), // 30 seconds
       defaultLabels: z.record(z.string()).default({})
@@ -179,6 +179,34 @@ const ConfigSchema = z.object({
       // Security
       allowedIPs: z.array(z.string()).default([]),
       timeout: z.number().default(5000) // 5 seconds
+    }),
+
+    // Tracing configuration
+    tracing: z.object({
+      enabled: z.boolean().default(true),
+      serviceName: z.string().default("claude-memory-mcp"),
+      endpoint: z.string().optional(),
+      sampleRate: z.number().min(0).max(1).default(1.0)
+    }),
+
+    // Health checks configuration  
+    healthChecks: z.object({
+      enabled: z.boolean().default(true),
+      interval: z.number().default(30000), // 30 seconds
+      timeout: z.number().default(5000) // 5 seconds
+    }),
+
+    // Alerting configuration
+    alerting: z.object({
+      enabled: z.boolean().default(true),
+      checkInterval: z.number().default(60000), // 1 minute
+      webhookUrl: z.string().optional(),
+      emailEnabled: z.boolean().default(false),
+      emailConfig: z.object({
+        smtp: z.string().optional(),
+        from: z.string().optional(),
+        to: z.array(z.string()).default([])
+      }).optional()
     })
   })
 });
@@ -301,6 +329,28 @@ function loadConfig() {
         } : undefined,
         allowedIPs: process.env.METRICS_ALLOWED_IPS?.split(","),
         timeout: process.env.METRICS_TIMEOUT ? parseInt(process.env.METRICS_TIMEOUT) : undefined
+      },
+      tracing: {
+        enabled: process.env.TRACING_ENABLED !== "false",
+        serviceName: process.env.TRACING_SERVICE_NAME,
+        endpoint: process.env.TRACING_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        sampleRate: process.env.TRACING_SAMPLE_RATE ? parseFloat(process.env.TRACING_SAMPLE_RATE) : undefined
+      },
+      healthChecks: {
+        enabled: process.env.HEALTH_CHECKS_ENABLED !== "false",
+        interval: process.env.HEALTH_CHECK_INTERVAL ? parseInt(process.env.HEALTH_CHECK_INTERVAL) : undefined,
+        timeout: process.env.HEALTH_CHECK_TIMEOUT ? parseInt(process.env.HEALTH_CHECK_TIMEOUT) : undefined
+      },
+      alerting: {
+        enabled: process.env.ALERTING_ENABLED !== "false",
+        checkInterval: process.env.ALERTING_CHECK_INTERVAL ? parseInt(process.env.ALERTING_CHECK_INTERVAL) : undefined,
+        webhookUrl: process.env.ALERT_WEBHOOK_URL,
+        emailEnabled: process.env.ALERT_EMAIL_ENABLED === "true",
+        emailConfig: process.env.ALERT_EMAIL_ENABLED === "true" ? {
+          smtp: process.env.ALERT_EMAIL_SMTP,
+          from: process.env.ALERT_EMAIL_FROM,
+          to: process.env.ALERT_EMAIL_TO?.split(",")
+        } : undefined
       }
     }
   };
