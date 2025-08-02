@@ -1,0 +1,34 @@
+{
+  "description": "Example Claude Code settings.json with Memory MCP Server integration",
+  "mcpServers": {
+    "claude-memory": {
+      "command": "node",
+      "args": ["path/to/claude-memory-mcp/dist/server/index.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "LOG_LEVEL": "info",
+        "SQLITE_PATH": ".claude-memory/memory.db",
+        "VECTOR_PATH": ".claude-memory/vectors",
+        "FILE_STORAGE_PATH": ".claude-memory/files"
+      }
+    }
+  },
+  "hooks": {
+    "preToolUse": [
+      {
+        "description": "Memory context injection before tool use",
+        "command": "claude-memory inject-context --tool=${tool.name} --workspace=${workspace.path}",
+        "tools": ["mcp__*__*"],
+        "enabled": true
+      }
+    ],
+    "postToolUse": [
+      {
+        "description": "Capture memory after tool use",
+        "command": "claude-memory capture-event --type=tool_use --tool=${tool.name} --result=${tool.status}",
+        "tools": ["mcp__claude-memory__*"],
+        "enabled": true
+      }
+    ]
+  }
+}

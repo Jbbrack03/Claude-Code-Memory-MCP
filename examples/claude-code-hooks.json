@@ -1,0 +1,42 @@
+{
+  "description": "Claude Code Memory MCP Server hook configuration",
+  "hooks": {
+    "preToolUse": [
+      {
+        "description": "Inject context before file operations",
+        "command": "claude-memory inject-context --query=\"${TOOL_NAME} ${TOOL_INPUT_file_path}\" --session=${SESSION_ID}",
+        "timeout": 5000,
+        "tools": ["Write", "Edit", "MultiEdit", "Read"]
+      }
+    ],
+    "postToolUse": [
+      {
+        "description": "Capture all tool usage events",
+        "command": "claude-memory capture-event --type=tool_use --content=\"${TOOL_NAME} completed\" --metadata='{\"tool\":\"${TOOL_NAME}\",\"status\":\"${TOOL_STATUS}\"}'",
+        "timeout": 3000,
+        "tools": ["*"]
+      },
+      {
+        "description": "Capture file write events with content",
+        "command": "claude-memory capture-event --type=file_write --content=\"${TOOL_OUTPUT}\" --metadata='{\"file\":\"${TOOL_INPUT_file_path}\"}'",
+        "timeout": 5000,
+        "tools": ["Write", "Edit", "MultiEdit"]
+      }
+    ],
+    "userPromptSubmit": [
+      {
+        "description": "Inject relevant context based on user prompt",
+        "command": "claude-memory inject-context --query=\"${USER_PROMPT}\" --limit=5",
+        "timeout": 5000
+      }
+    ],
+    "assistantResponse": [
+      {
+        "description": "Capture significant assistant responses",
+        "command": "claude-memory capture-event --type=assistant_response --content=\"${ASSISTANT_RESPONSE}\" --metadata='{\"prompt\":\"${USER_PROMPT}\"}'",
+        "timeout": 3000,
+        "condition": "length(${ASSISTANT_RESPONSE}) > 500"
+      }
+    ]
+  }
+}

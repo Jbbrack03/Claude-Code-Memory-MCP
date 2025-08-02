@@ -13,6 +13,8 @@ import { ErrorHandler } from "../utils/error-handler.js";
 import { GracefulDegradation } from "../utils/graceful-degradation.js";
 import { RateLimiter } from "../utils/rate-limiter.js";
 import { MonitoringSystem } from "../monitoring/index.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import { SessionManager } from "../session/manager.js";
 
 // Define metadata schema
 const metadataSchema = z.record(z.union([
@@ -37,6 +39,8 @@ let git: GitIntegration;
 let intelligence: IntelligenceLayer;
 // let healthChecker: HealthChecker; // Unused for now
 let monitoring: MonitoringSystem;
+let workspaceManager: WorkspaceManager;
+let sessionManager: SessionManager;
 
 // Initialize rate limiters
 const captureMemoryLimiter = new RateLimiter({
@@ -104,6 +108,16 @@ async function initialize() {
     intelligence = new IntelligenceLayer(config.intelligence, storage);
     await intelligence.initialize();
 
+    // Initialize workspace manager
+    workspaceManager = new WorkspaceManager(git);
+    
+    // Initialize session manager
+    sessionManager = new SessionManager({
+      sessionTimeout: 30 * 60 * 1000, // 30 minutes
+      maxActiveSessions: 50,
+      persistSessions: true
+    }, (storage as any).sqlite);
+
     // Initialize health checker
     // healthChecker = new HealthChecker({
     //   storage,
@@ -148,8 +162,13 @@ function registerTools() {
     },
     async (args) => {
       const { eventType, content, metadata } = args;
-      const sessionId = process.env.SESSION_ID || "default";
-      const workspaceId = "default"; // git?.getCurrentWorkspace() || "unknown"; // Method doesn't exist yet
+      
+      // Get workspace and session
+      const workspaceId = await workspaceManager.detectWorkspace();
+      const session = await sessionManager.getOrCreateSession(
+        workspaceId, 
+        process.env.SESSION_ID
+      );
       
       return await monitoring.getInstrumentation().traceMemoryCapture(
         eventType,
@@ -160,7 +179,7 @@ function registerTools() {
             monitoring.getMetrics().recordMemoryCapture(eventType, 'success', workspaceId);
             
             // Check rate limit
-            const rateLimitResult = await captureMemoryLimiter.checkLimit(sessionId);
+            const rateLimitResult = await captureMemoryLimiter.checkLimit(session.id);
             
             if (!rateLimitResult.allowed) {
               monitoring.getMetrics().recordRateLimitExceeded('capture-memory', workspaceId);
@@ -189,7 +208,8 @@ function registerTools() {
               content,
               metadata,
               timestamp: new Date(),
-              sessionId: sessionId
+              sessionId: session.id,
+              workspaceId
             });
 
             timer.end('success');
@@ -249,9 +269,15 @@ function registerTools() {
     async (args) => {
       const { query, limit, filters } = args;
       try {
+        // Get workspace and session
+        const workspaceId = await workspaceManager.detectWorkspace();
+        const session = await sessionManager.getOrCreateSession(
+          workspaceId,
+          process.env.SESSION_ID
+        );
+        
         // Check rate limit
-        const sessionId = process.env.SESSION_ID || "default";
-        const rateLimitResult = await retrieveMemoriesLimiter.checkLimit(sessionId);
+        const rateLimitResult = await retrieveMemoriesLimiter.checkLimit(session.id);
         
         if (!rateLimitResult.allowed) {
           return {
@@ -265,7 +291,11 @@ function registerTools() {
         
         const memories = await intelligence.retrieveMemories(query, {
           limit,
-          filters
+          filters: {
+            ...filters,
+            workspaceId,
+            sessionId: session.id
+          }
         });
 
         return {
@@ -332,9 +362,15 @@ function registerTools() {
     async (args) => {
       const { query, limit, filters } = args;
       try {
+        // Get workspace and session
+        const workspaceId = await workspaceManager.detectWorkspace();
+        const session = await sessionManager.getOrCreateSession(
+          workspaceId,
+          process.env.SESSION_ID
+        );
+        
         // Check rate limit
-        const sessionId = process.env.SESSION_ID || "default";
-        const rateLimitResult = await buildContextLimiter.checkLimit(sessionId);
+        const rateLimitResult = await buildContextLimiter.checkLimit(session.id);
         
         if (!rateLimitResult.allowed) {
           return {
@@ -354,7 +390,11 @@ function registerTools() {
         // First retrieve relevant memories
         const memories = await intelligence.retrieveMemories(query, {
           limit,
-          filters
+          filters: {
+            ...filters,
+            workspaceId,
+            sessionId: session.id
+          }
         });
         
         // Then build context from them
@@ -536,6 +576,8 @@ async function cleanup() {
     hooks?.close();
     await git?.close();
     await intelligence?.close();
+    workspaceManager?.clearCache();
+    sessionManager?.close();
     
     // Shutdown monitoring system last
     await monitoring?.shutdown();

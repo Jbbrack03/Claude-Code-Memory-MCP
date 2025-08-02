@@ -14,7 +14,10 @@ export interface GitMonitorConfig {
 
 export interface GitState {
   initialized: boolean;
+  repository?: string;
+  branch?: string;
   currentBranch?: string;
+  commit?: string;
   currentCommit?: string;
   isDirty: boolean;
   detached?: boolean;

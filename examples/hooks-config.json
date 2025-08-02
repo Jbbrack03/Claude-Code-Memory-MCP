@@ -1,37 +1,64 @@
 {
+  "description": "Example Claude Code hooks configuration for Memory MCP Server",
+  "version": "1.0",
   "hooks": {
-    "PreToolUse": [
+    "preToolUse": [
       {
-        "matcher": "^(Write|Edit|MultiEdit)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory inject-context --tool=${TOOL_NAME} --file=${TOOL_INPUT_file_path}"
-          }
-        ]
+        "description": "Inject memory context before file operations",
+        "tools": ["Write", "Edit", "MultiEdit", "Read"],
+        "command": "claude-memory inject-context --query=\"${tool.name} ${tool.input.file_path}\" --limit=5",
+        "timeout": 5000,
+        "enabled": true
+      },
+      {
+        "description": "Log tool usage start",
+        "tools": ["*"],
+        "command": "echo \"[Memory] Starting ${tool.name} at $(date)\" >> .claude-memory/activity.log",
+        "timeout": 1000,
+        "enabled": true
       }
     ],
-    "PostToolUse": [
+    "postToolUse": [
       {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory capture-event --tool=${TOOL_NAME} --status=${TOOL_STATUS} --session=${SESSION_ID}"
-          }
-        ]
+        "description": "Capture file modifications",
+        "tools": ["Write", "Edit", "MultiEdit"],
+        "command": "claude-memory capture-event --type=file_write --content=\"Modified ${tool.input.file_path}\" --metadata='{\"file\":\"${tool.input.file_path}\",\"tool\":\"${tool.name}\"}'",
+        "timeout": 3000,
+        "enabled": true
+      },
+      {
+        "description": "Capture all tool completions",
+        "tools": ["*"],
+        "command": "claude-memory capture-event --type=tool_use --content=\"${tool.name} completed with status ${tool.status}\" --metadata='{\"tool\":\"${tool.name}\",\"status\":\"${tool.status}\"}'",
+        "timeout": 3000,
+        "enabled": true
       }
     ],
-    "UserPromptSubmit": [
+    "userPromptSubmit": [
       {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory inject-context --prompt='${USER_PROMPT}' --session=${SESSION_ID}"
-          }
-        ]
+        "description": "Inject context based on user prompt",
+        "command": "claude-memory inject-context --query=\"${prompt.text}\" --limit=10",
+        "timeout": 5000,
+        "enabled": true
+      }
+    ],
+    "assistantResponse": [
+      {
+        "description": "Capture significant responses",
+        "command": "test ${response.length} -gt 500 && claude-memory capture-event --type=assistant_response --content=\"${response.text}\" --metadata='{\"tokens\":${response.tokens}}'",
+        "timeout": 3000,
+        "enabled": true
       }
     ]
+  },
+  "settings": {
+    "logLevel": "info",
+    "retryAttempts": 2,
+    "defaultTimeout": 5000,
+    "environment": {
+      "SESSION_ID": "${workspace.sessionId}",
+      "WORKSPACE_PATH": "${workspace.path}",
+      "PROJECT_NAME": "${workspace.name}"
+    }
   }
 }

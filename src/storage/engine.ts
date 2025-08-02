@@ -94,10 +94,13 @@ export class StorageEngine {
     if (this.embeddingService && this.shouldGenerateEmbedding(memory)) {
       try {
         const embedding = await this.embeddingService(memory.content);
+        // Ensure consistent metadata format
         const metadata: Record<string, string> = {
           memoryId: storedMemory.id,
+          id: storedMemory.id, // Include both for compatibility
           eventType: memory.eventType,
-          sessionId: memory.sessionId
+          sessionId: memory.sessionId,
+          content: memory.content.substring(0, 200) // Include truncated content for context
         };
         if (memory.workspaceId !== undefined) {
           metadata.workspaceId = memory.workspaceId;
@@ -180,9 +183,17 @@ export class StorageEngine {
         });
         
         // Get full memories from SQLite - extract memoryId from metadata
+        // Handle various metadata formats robustly
         const memoryIds = vectorResults
-          .map(r => r.metadata?.memoryId || r.metadata?.id)
-          .filter((id): id is string => typeof id === 'string' && id !== '');
+          .map(r => {
+            // Try different possible locations for memory ID
+            const metadata = r.metadata || {};
+            return metadata.memoryId || 
+                   metadata.id || 
+                   metadata.memory_id ||
+                   (typeof metadata === 'string' ? metadata : null);
+          })
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
         if (memoryIds.length > 0) {
           const sqliteMemories = this.sqlite.getMemoriesByIds(memoryIds);
           
@@ -307,12 +318,70 @@ export class StorageEngine {
   }
 
   // Test helper methods (for integration tests)
-  storeTestMemories(_memories: unknown[]): void {
-    throw new Error('Test memory storage not implemented');
+  async storeTestMemories(memories: Array<Omit<Memory, "id">>): Promise<Memory[]> {
+    if (!this.initialized) {
+      throw new Error("Storage engine not initialized");
+    }
+
+    const stored: Memory[] = [];
+    for (const memory of memories) {
+      try {
+        const result = await this.captureMemory(memory);
+        stored.push(result);
+      } catch (error) {
+        logger.error("Failed to store test memory", error);
+        throw error;
+      }
+    }
+    return stored;
   }
 
-  simulateLargeDataset(_count: number): void {
-    throw new Error('Large dataset simulation not implemented');
+  async simulateLargeDataset(count: number): Promise<void> {
+    if (!this.initialized) {
+      throw new Error("Storage engine not initialized");
+    }
+
+    logger.info(`Simulating large dataset with ${count} memories`);
+    const batchSize = 100;
+    const eventTypes = ['file_write', 'code_write', 'command_run', 'tool_use', 'documentation'];
+    
+    for (let i = 0; i < count; i += batchSize) {
+      const batch: Array<Omit<Memory, "id">> = [];
+      const remaining = Math.min(batchSize, count - i);
+      
+      for (let j = 0; j < remaining; j++) {
+        const idx = i + j;
+        batch.push({
+          eventType: eventTypes[idx % eventTypes.length] ?? 'file_write',
+          content: `Test memory ${idx}: ${this.generateTestContent(idx)}`,
+          timestamp: new Date(Date.now() - (count - idx) * 60000), // Spread over time
+          sessionId: `test-session-${Math.floor(idx / 10)}`,
+          workspaceId: `test-workspace-${Math.floor(idx / 100)}`,
+          metadata: {
+            index: idx,
+            batch: Math.floor(i / batchSize),
+            isTest: true
+          }
+        });
+      }
+      
+      await this.storeTestMemories(batch);
+      logger.debug(`Stored batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(count / batchSize)}`);
+    }
+    
+    logger.info(`Completed simulating ${count} memories`);
+  }
+
+  private generateTestContent(index: number): string {
+    const contents = [
+      "function calculateSum(a: number, b: number): number { return a + b; }",
+      "const result = await fetch('/api/data'); return result.json();",
+      "class UserService { constructor(private db: Database) {} }",
+      "import React from 'react'; export default function App() { return <div>Hello</div>; }",
+      "SELECT * FROM users WHERE active = true ORDER BY created_at DESC;",
+      "# Documentation\nThis is a test document with multiple lines\nand various content types."
+    ];
+    return contents[index % contents.length] || contents[0] || "default content";
   }
 
   private validateMemory(memory: Omit<Memory, "id">): void {

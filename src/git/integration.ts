@@ -17,6 +17,7 @@ export class GitIntegration {
   private initialized = false;
   private monitor?: GitMonitor;
   private validator?: GitValidator;
+  private cachedWorkspace?: string;
 
   constructor(config: Config["git"]) {
     this.config = config;
@@ -105,6 +106,26 @@ export class GitIntegration {
     return result.valid;
   }
 
+  async getCurrentWorkspace(): Promise<string | null> {
+    if (!this.initialized || !this.config.enabled || !this.monitor) {
+      return null;
+    }
+
+    // Use cached value if available
+    if (this.cachedWorkspace) {
+      return this.cachedWorkspace;
+    }
+
+    // Get repository root from monitor
+    const repoRoot = this.monitor.getRepositoryRoot();
+    if (repoRoot) {
+      this.cachedWorkspace = repoRoot;
+      return repoRoot;
+    }
+
+    return null;
+  }
+
   async close(): Promise<void> {
     logger.info("Closing Git integration...");
     
@@ -113,6 +134,7 @@ export class GitIntegration {
     }
     
     this.initialized = false;
+    this.cachedWorkspace = undefined;
     logger.info("Git integration closed");
     
     // Return resolved promise to satisfy async requirement

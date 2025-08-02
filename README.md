@@ -27,59 +27,122 @@ The server is built with the following principles:
 ## Installation
 
 ```bash
-npm install claude-memory-mcp
+# Clone and build from source
+git clone https://github.com/yourusername/claude-memory-mcp.git
+cd claude-memory-mcp
+npm install
+npm run build
+
+# Or install globally (once published)
+npm install -g claude-memory-mcp
 ```
 
 ## Configuration
 
-Add to your Claude Code configuration:
+### 1. Environment Setup
+
+Create a `.env` file (see `.env.example` for all options):
+
+```bash
+# Core configuration
+NODE_ENV=production
+LOG_LEVEL=info
+
+# Storage paths
+SQLITE_PATH=.claude-memory/memory.db
+VECTOR_PATH=.claude-memory/vectors
+FILE_STORAGE_PATH=.claude-memory/files
+
+# Features
+GIT_ENABLED=true
+EMBEDDINGS_ENABLED=true
+MONITORING_ENABLED=true
+```
+
+### 2. Claude Code MCP Configuration
+
+Add to your Claude Code `settings.json`:
 
 ```json
 {
-  "claude-memory": {
-    "command": "claude-memory-mcp",
-    "args": ["--production"],
-    "env": {
-      "MEMORY_MODE": "production",
-      "GIT_INTEGRATION": "true",
-      "MAX_MEMORY_SIZE": "100MB"
+  "mcpServers": {
+    "claude-memory": {
+      "command": "node",
+      "args": ["/path/to/claude-memory-mcp/dist/server/index.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "LOG_LEVEL": "info"
+      }
     }
   }
 }
 ```
 
-### Hook Configuration
+### 3. Hook Configuration
 
-Configure Claude Code hooks to capture events:
+Configure Claude Code hooks to capture events and inject context:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [
+    "preToolUse": [
       {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory inject-context --operation=pre-tool"
-          }
-        ]
+        "description": "Inject context before file operations",
+        "tools": ["Write", "Edit", "MultiEdit", "Read"],
+        "command": "claude-memory inject-context --query=\"${tool.name} ${tool.input.file_path}\" --limit=5",
+        "timeout": 5000
       }
     ],
-    "PostToolUse": [
+    "postToolUse": [
       {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-memory capture-event --operation=post-tool"
-          }
-        ]
+        "description": "Capture file modifications",
+        "tools": ["Write", "Edit", "MultiEdit"],
+        "command": "claude-memory capture-event --type=file_write --content=\"Modified ${tool.input.file_path}\" --metadata='{\"file\":\"${tool.input.file_path}\"}'",
+        "timeout": 3000
+      }
+    ],
+    "userPromptSubmit": [
+      {
+        "description": "Inject context based on user prompt",
+        "command": "claude-memory inject-context --query=\"${prompt.text}\" --limit=10",
+        "timeout": 5000
       }
     ]
   }
 }
 ```
+
+## Usage
+
+### CLI Commands
+
+The server provides a CLI interface for hook integration:
+
+```bash
+# Capture an event
+claude-memory capture-event \
+  --type=file_write \
+  --content="Updated authentication logic" \
+  --metadata='{"file":"auth.ts","lines":50}'
+
+# Inject context
+claude-memory inject-context \
+  --query="working with authentication" \
+  --limit=5
+
+# View statistics
+claude-memory stats
+```
+
+### MCP Tools
+
+When connected as an MCP server, the following tools are available:
+
+- **capture-memory**: Store a memory with semantic indexing
+- **retrieve-memories**: Search memories by query and filters
+- **build-context**: Build formatted context for injection
+- **git-state**: Get current Git repository state
+- **health-check**: Check system health and component status
 
 ## Development
 
@@ -112,14 +175,44 @@ npm test
 claude-memory-mcp/
 ├── src/
 │   ├── server/           # MCP server implementation
-│   ├── storage/          # Storage engine and abstractions
-│   ├── hooks/            # Hook system and execution
-│   ├── git/              # Git integration
-│   ├── intelligence/     # Embedding and retrieval
+│   ├── cli/              # CLI wrapper for hooks integration
+│   ├── storage/          # Multi-layer storage (SQLite, Vector, Files)
+│   ├── hooks/            # Hook system with sandboxing
+│   ├── git/              # Git integration and validation
+│   ├── intelligence/     # Semantic search and embeddings
+│   ├── workspace/        # Workspace detection and management
+│   ├── session/          # Session lifecycle management
+│   ├── monitoring/       # Observability (metrics, tracing, health)
+│   ├── utils/            # Shared utilities and helpers
 │   └── types/            # TypeScript type definitions
-├── tests/                # Test suites
+├── tests/                # Comprehensive test suites
 ├── docs/                 # Documentation
-└── examples/             # Example configurations
+├── examples/             # Example configurations and scripts
+└── dist/                 # Compiled JavaScript output
+```
+
+### Example: Capturing Code Changes
+
+```typescript
+// When you modify a file, the hook captures it automatically
+// Before: Claude Code executes Write tool
+// Hook: claude-memory inject-context --query="auth.ts authentication"
+// During: You get relevant context about previous auth implementations
+// After: claude-memory capture-event --type=file_write --content="[changes]"
+```
+
+### Example: Semantic Search
+
+```bash
+# Search for memories about authentication
+claude-memory search --query="authentication logic" --limit=5
+
+# Filter by workspace and time
+claude-memory search \
+  --query="database schema" \
+  --workspace="/path/to/project" \
+  --after="2024-01-01" \
+  --limit=10
 ```
 
 ## Contributing

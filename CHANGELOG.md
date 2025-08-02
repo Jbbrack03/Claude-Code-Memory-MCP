@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2025-08-02
+
+### Added
+- **CLI Integration Layer**: Complete command-line interface for hook integration
+  - `claude-memory` CLI with `inject-context` and `capture-event` commands
+  - Bridge between Claude Code hooks and MCP server functionality
+  - Command-line argument parsing and validation
+  - Automatic workspace and session detection
+- **Workspace Management System**: Dynamic workspace detection and isolation
+  - Automatic detection of Git repositories, NPM packages, or directories
+  - Workspace metadata caching for performance
+  - Replace hardcoded "default" workspace with dynamic detection
+  - GitIntegration enhancement with `getCurrentWorkspace()` method
+- **Session Management System**: Complete session lifecycle management
+  - Session creation, tracking, and expiration
+  - Persistent session storage in SQLite
+  - Automatic cleanup of expired sessions
+  - Support for multiple active sessions per workspace
+- **Configuration Enhancements**:
+  - Comprehensive `.env.example` file with all configuration options
+  - Environment variable documentation
+  - Example configurations for Claude Code hooks
+  - Multiple hook configuration examples (JSON and shell scripts)
+
+### Fixed
+- **Vector Store Metadata Extraction**: Improved robustness
+  - Handle multiple metadata format variations
+  - Added fallback handling for different metadata structures
+  - Include content preview in vector metadata for better context
+- **TypeScript Compilation Issues**:
+  - Fixed GitState interface missing properties (repository, branch, commit)
+  - Fixed session manager type issues with SQLite
+  - Fixed hnswlib-node CommonJS import compatibility
+  - Resolved all TypeScript compilation errors
+- **Storage Engine Test Helpers**: Implemented missing test utilities
+  - Added `storeTestMemories()` for batch test data creation
+  - Added `simulateLargeDataset()` for performance testing
+  - Generate realistic test content for various event types
+
+### Enhanced
+- **Documentation Updates**:
+  - Updated README with correct MCP server configuration
+  - Added CLI usage examples and commands
+  - Updated project structure documentation
+  - Added semantic search examples
+  - Corrected hook configuration examples
+- **Implementation Plan**: Added phases 9-12 for complete functionality
+  - Phase 9: CLI Integration Layer
+  - Phase 10: Workspace and Session Management
+  - Phase 11: Hook System Alignment
+  - Phase 12: Final Integration and Testing
+
 ## [0.11.0] - 2025-08-02
 
 ### Added
