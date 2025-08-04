@@ -106,24 +106,24 @@ export class GitIntegration {
     return result.valid;
   }
 
-  async getCurrentWorkspace(): Promise<string | null> {
+  getCurrentWorkspace(): Promise<string | null> {
     if (!this.initialized || !this.config.enabled || !this.monitor) {
-      return null;
+      return Promise.resolve(null);
     }
 
     // Use cached value if available
     if (this.cachedWorkspace) {
-      return this.cachedWorkspace;
+      return Promise.resolve(this.cachedWorkspace);
     }
 
     // Get repository root from monitor
     const repoRoot = this.monitor.getRepositoryRoot();
     if (repoRoot) {
       this.cachedWorkspace = repoRoot;
-      return repoRoot;
+      return Promise.resolve(repoRoot);
     }
 
-    return null;
+    return Promise.resolve(null);
   }
 
   async close(): Promise<void> {

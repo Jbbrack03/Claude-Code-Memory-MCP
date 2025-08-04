@@ -5,6 +5,8 @@ import { config } from '../config/index.js';
 import { StorageEngine } from '../storage/engine.js';
 import { IntelligenceLayer } from '../intelligence/layer.js';
 import { GitIntegration } from '../git/integration.js';
+import { WorkspaceManager } from '../workspace/manager.js';
+import { SessionManager } from '../session/manager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -21,6 +23,8 @@ const command = args[0];
 let storage: StorageEngine;
 let intelligence: IntelligenceLayer;
 let git: GitIntegration;
+let workspaceManager: WorkspaceManager;
+let sessionManager: SessionManager;
 
 async function initializeSubsystems() {
   try {
@@ -31,6 +35,16 @@ async function initializeSubsystems() {
     // Initialize git integration 
     git = new GitIntegration(config.git);
     await git.initialize();
+
+    // Initialize workspace manager
+    workspaceManager = new WorkspaceManager(git);
+
+    // Initialize session manager with config and database
+    sessionManager = new SessionManager({
+      sessionTimeout: 30 * 60 * 1000, // 30 minutes
+      maxActiveSessions: 10,
+      persistSessions: true
+    }, storage.getDatabase() || undefined);
 
     // Initialize intelligence layer
     intelligence = new IntelligenceLayer(config.intelligence, storage);
@@ -56,9 +70,13 @@ async function handleInjectContext(args: string[]) {
   }
 
   try {
-    // Get current workspace and session
-    const workspaceId = await detectWorkspace();
-    const sessionId = options.session || process.env.SESSION_ID || generateSessionId();
+    // Get current workspace using WorkspaceManager
+    const workspacePath = await detectWorkspace();
+    const workspaceId = await workspaceManager.detectWorkspace(workspacePath);
+    
+    // Get or create session using SessionManager
+    const session = await sessionManager.getOrCreateSession(workspaceId, options.session);
+    const sessionId = session.id;
     
     // Build query from context
     const query = options.prompt || options.tool || 'general context';
@@ -106,9 +124,13 @@ async function handleCaptureEvent(args: string[]) {
   }
 
   try {
-    // Get current workspace and session
-    const workspaceId = await detectWorkspace();
-    const sessionId = options.session || process.env.SESSION_ID || generateSessionId();
+    // Get current workspace using WorkspaceManager
+    const workspacePath = await detectWorkspace();
+    const workspaceId = await workspaceManager.detectWorkspace(workspacePath);
+    
+    // Get or create session using SessionManager
+    const session = await sessionManager.getOrCreateSession(workspaceId, options.session);
+    const sessionId = session.id;
     
     // Get git state
     const gitState = await git.getCurrentState();
@@ -148,7 +170,7 @@ async function handleCaptureEvent(args: string[]) {
   }
 }
 
-async function handleMCPServer() {
+function handleMCPServer() {
   // Start the MCP server in a subprocess
   const serverPath = path.join(__dirname, '..', 'server', 'index.js');
   const child = spawn(process.execPath, [serverPath], {
@@ -185,14 +207,11 @@ async function detectWorkspace(): Promise<string> {
   return process.cwd();
 }
 
-function generateSessionId(): string {
-  // Generate a unique session ID
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
 
 async function cleanup() {
   try {
     await storage?.close();
+    sessionManager?.close(); // SessionManager close() is synchronous
     await git?.close();
     await intelligence?.close();
   } catch (error) {
@@ -204,7 +223,7 @@ async function cleanup() {
 async function main() {
   if (!command) {
     // No command specified, run as MCP server
-    await handleMCPServer();
+    handleMCPServer();
   } else {
     switch (command) {
       case 'inject-context':
@@ -214,7 +233,7 @@ async function main() {
         await handleCaptureEvent(args);
         break;
       case 'server':
-        await handleMCPServer();
+        handleMCPServer();
         break;
       default:
         console.error(`Unknown command: ${command}`);
@@ -225,14 +244,12 @@ async function main() {
 }
 
 // Handle process signals
-process.on('SIGINT', async () => {
-  await cleanup();
-  process.exit(0);
+process.on('SIGINT', () => {
+  cleanup().then(() => process.exit(0)).catch(() => process.exit(1));
 });
 
-process.on('SIGTERM', async () => {
-  await cleanup();
-  process.exit(0);
+process.on('SIGTERM', () => {
+  cleanup().then(() => process.exit(0)).catch(() => process.exit(1));
 });
 
 // Run main

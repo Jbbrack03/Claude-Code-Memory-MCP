@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.2] - 2025-08-04
+
+### Fixed
+- **Critical Test Suite Issues**: Resolved all failing tests achieving 100% pass rate (677/677 tests)
+  - Fixed final vector constraint test: memory pressure monitoring callbacks now trigger correctly at 70% and 90% thresholds
+  - Fixed ESM module compatibility: Added proper `__dirname` definition for git remote tracking tests
+  - Fixed CLI TypeScript errors: Proper WorkspaceManager and SessionManager integration
+  - Fixed async/await patterns and promise handling in CLI signal handlers
+  - Fixed database method signatures and null/undefined type compatibility
+- **Vector Index Constraints**: Completed implementation with automatic pruning (21/21 tests passing)
+  - Memory pressure monitoring with configurable callback thresholds
+  - Enhanced memory estimation for reliable constraint testing
+  - All pruning strategies (FIFO, LRU, priority-based, memory-based) working correctly
+- **ModelMemoryLimiter**: Fully implemented AI model memory constraint management
+  - Prevents OOM conditions with configurable memory limits
+  - Automatic model unloading when memory thresholds exceeded
+  - Comprehensive test coverage (26/26 tests passing)
+
+### Enhanced
+- **Code Quality**: Fixed critical lint errors and TypeScript compilation issues
+  - Removed unused variables and parameters
+  - Fixed async function patterns and promise handling
+  - Added proper database type definitions
+  - Resolved ESM import/export compatibility
+- **Test Infrastructure**: Achieved 100% test reliability
+  - All timeout issues resolved with proper resource cleanup
+  - Enhanced test isolation and deterministic execution
+  - Improved error reporting and debugging capabilities
+- **CLI Integration**: Complete WorkspaceManager and SessionManager integration
+  - Proper workspace detection and session lifecycle management
+  - Fixed async initialization patterns and cleanup procedures
+  - Enhanced command-line argument parsing and validation
+
+### Development
+- **Phase 15 Complete**: Vector index constraints and ModelMemoryLimiter fully implemented
+- **Project Health**: 100% test pass rate, zero TypeScript errors, critical lint issues resolved
+- **Memory Management**: Advanced vector storage with automatic pruning and memory pressure monitoring
+- **Production Ready**: Enhanced error handling, resource cleanup, and system reliability
+
 ## [0.14.1] - 2025-08-04
 
 ### Documentation

@@ -10,10 +10,14 @@
 4. [Hook System API](#hook-system-api)
 5. [Git Integration API](#git-integration-api)
 6. [Intelligence Layer API](#intelligence-layer-api)
-7. [Configuration Reference](#configuration-reference)
-8. [Error Handling](#error-handling)
-9. [Performance & Monitoring](#performance--monitoring)
-10. [Security Considerations](#security-considerations)
+7. [Workspace Management API](#workspace-management-api)
+   - [WorkspaceManager](#workspacemanager)
+8. [Session Management API](#session-management-api)
+   - [SessionManager](#sessionmanager)
+9. [Configuration Reference](#configuration-reference)
+10. [Error Handling](#error-handling)
+11. [Performance & Monitoring](#performance--monitoring)
+12. [Security Considerations](#security-considerations)
 
 ## Overview
 
@@ -950,6 +954,335 @@ if (!health.components.storage.healthy) {
   console.warn('Storage unhealthy:', health.components.storage);
 }
 ```
+
+## Workspace Management API
+
+### WorkspaceManager
+
+The WorkspaceManager handles workspace detection, initialization, and metadata management. It ensures complete isolation between different projects.
+
+#### detectWorkspace()
+Automatically detect and initialize workspace from a given path.
+
+```typescript
+async detectWorkspace(path: string): Promise<Workspace>
+```
+
+**Parameters:**
+- `path`: File system path to detect workspace from
+
+**Returns:**
+```typescript
+interface Workspace {
+  id: string;              // Unique workspace identifier
+  path: string;            // Absolute workspace path
+  name: string;            // Human-readable workspace name
+  gitInfo?: {              // Git repository information
+    remote?: string;       // Remote URL
+    branch: string;        // Current branch
+    commit: string;        // Current commit hash
+  };
+  createdAt: Date;         // First detection timestamp
+  lastAccessedAt: Date;    // Last access timestamp
+  metadata: Record<string, any>; // Custom metadata
+}
+```
+
+**Behavior:**
+- Creates workspace record if not exists
+- Updates last accessed timestamp
+- Detects Git repository information
+- Generates deterministic ID from path
+
+#### initializeWorkspace()
+Explicitly initialize a workspace with custom configuration.
+
+```typescript
+async initializeWorkspace(
+  path: string,
+  config?: WorkspaceConfig
+): Promise<void>
+```
+
+**Parameters:**
+- `path`: Workspace root path
+- `config`: Optional workspace configuration
+
+```typescript
+interface WorkspaceConfig {
+  name?: string;           // Custom workspace name
+  vectorIndexType?: 'basic' | 'scalable';  // Vector index type
+  memoryLimit?: number;    // Max memories to store
+  retentionDays?: number;  // Auto-cleanup after days
+  metadata?: Record<string, any>;  // Custom metadata
+}
+```
+
+**Validation:**
+- Path must exist and be accessible
+- Path must be absolute
+- Cannot reinitialize active workspace
+
+#### getWorkspaceConfig()
+Retrieve current workspace configuration.
+
+```typescript
+async getWorkspaceConfig(
+  workspaceId: string
+): Promise<WorkspaceConfig>
+```
+
+**Returns:** Current workspace configuration including defaults
+
+#### updateWorkspaceMetadata()
+Update workspace metadata without affecting configuration.
+
+```typescript
+async updateWorkspaceMetadata(
+  workspaceId: string,
+  metadata: Record<string, any>
+): Promise<void>
+```
+
+**Parameters:**
+- `workspaceId`: Target workspace ID
+- `metadata`: Metadata to merge (not replace)
+
+**Behavior:**
+- Merges with existing metadata
+- Validates metadata size (max 10KB)
+- Updates last modified timestamp
+
+#### listWorkspaces()
+List all known workspaces with optional filtering.
+
+```typescript
+async listWorkspaces(
+  filters?: WorkspaceFilters
+): Promise<Workspace[]>
+```
+
+**Filters:**
+```typescript
+interface WorkspaceFilters {
+  active?: boolean;        // Only active workspaces
+  stale?: boolean;         // Not accessed in 30+ days  
+  hasGit?: boolean;        // Only Git repositories
+  namePattern?: string;    // Name glob pattern
+}
+```
+
+#### cleanupWorkspace()
+Remove stale data from a workspace.
+
+```typescript
+async cleanupWorkspace(
+  workspaceId: string,
+  options?: CleanupOptions
+): Promise<CleanupStats>
+```
+
+**Options:**
+```typescript
+interface CleanupOptions {
+  olderThan?: Date;        // Remove memories before date
+  keepRecent?: number;     // Keep N most recent
+  removeVectors?: boolean; // Clean vector index
+  removeFiles?: boolean;   // Clean file store
+}
+```
+
+**Returns:**
+```typescript
+interface CleanupStats {
+  memoriesRemoved: number;
+  vectorsRemoved: number;
+  filesRemoved: number;
+  spaceReclaimed: number;  // Bytes
+}
+```
+
+### WorkspaceManager Implementation Notes
+
+**Storage:**
+- Workspace metadata stored in SQLite `workspaces` table
+- Separate vector indexes per workspace
+- Isolated file storage directories
+
+**Performance:**
+- Workspace detection cached for 5 minutes
+- Git info refreshed on demand
+- Lazy loading of workspace configs
+
+**Security:**
+- Path traversal prevention
+- Workspace ID validation
+- Metadata sanitization
+
+## Session Management API
+
+### SessionManager
+
+The SessionManager tracks Claude Code sessions, maintaining context continuity and session history.
+
+#### createSession()
+Create a new session for a workspace.
+
+```typescript
+async createSession(
+  workspaceId: string,
+  metadata?: Record<string, any>
+): Promise<Session>
+```
+
+**Returns:**
+```typescript
+interface Session {
+  id: string;              // Unique session ID
+  workspaceId: string;     // Associated workspace
+  startedAt: Date;         // Session start time
+  endedAt?: Date;          // Session end time
+  lastActivityAt: Date;    // Last activity timestamp
+  memoryCount: number;     // Memories in session
+  metadata: Record<string, any>;  // Session metadata
+  status: 'active' | 'ended' | 'expired';
+}
+```
+
+**Behavior:**
+- Auto-generates unique session ID
+- Links to current workspace
+- Initializes activity tracking
+- Sets session as active
+
+#### getActiveSession()
+Get the currently active session for a workspace.
+
+```typescript
+async getActiveSession(
+  workspaceId: string
+): Promise<Session | null>
+```
+
+**Returns:**
+- Active session if exists
+- `null` if no active session
+
+**Notes:**
+- Only one active session per workspace
+- Sessions expire after inactivity timeout
+
+#### endSession()
+Explicitly end a session.
+
+```typescript
+async endSession(
+  sessionId: string,
+  metadata?: Record<string, any>
+): Promise<void>
+```
+
+**Behavior:**
+- Sets session status to 'ended'
+- Records end timestamp
+- Merges final metadata
+- Preserves session history
+
+#### getSessionHistory()
+Retrieve session history for a workspace.
+
+```typescript
+async getSessionHistory(
+  workspaceId: string,
+  options?: SessionHistoryOptions
+): Promise<Session[]>
+```
+
+**Options:**
+```typescript
+interface SessionHistoryOptions {
+  limit?: number;          // Max results (default: 10)
+  offset?: number;         // Pagination offset
+  startDate?: Date;        // Filter by date range
+  endDate?: Date;
+  includeExpired?: boolean; // Include expired sessions
+  orderBy?: 'startedAt' | 'endedAt' | 'memoryCount';
+  orderDirection?: 'asc' | 'desc';
+}
+```
+
+#### updateSessionActivity()
+Update session's last activity timestamp.
+
+```typescript
+async updateSessionActivity(
+  sessionId: string
+): Promise<void>
+```
+
+**Behavior:**
+- Updates `lastActivityAt` timestamp
+- Resets expiration timer
+- Called automatically on memory operations
+
+#### getSessionStats()
+Get statistics for a session.
+
+```typescript
+async getSessionStats(
+  sessionId: string
+): Promise<SessionStats>
+```
+
+**Returns:**
+```typescript
+interface SessionStats {
+  duration: number;        // Session duration in ms
+  memoryCount: number;     // Total memories
+  memoriesByType: Record<string, number>;
+  avgMemorySize: number;   // Average memory size
+  peakActivity: Date;      // Most active timestamp
+  gitBranches: string[];   // Branches worked on
+}
+```
+
+#### expireInactiveSessions()
+Expire sessions inactive for timeout period.
+
+```typescript
+async expireInactiveSessions(
+  timeoutMinutes?: number
+): Promise<number>
+```
+
+**Parameters:**
+- `timeoutMinutes`: Inactivity timeout (default: 30)
+
+**Returns:** Number of sessions expired
+
+**Behavior:**
+- Runs periodically via cron
+- Sets status to 'expired'
+- Preserves session data
+- Frees active session slot
+
+### SessionManager Implementation Notes
+
+**Storage:**
+- Sessions stored in SQLite `sessions` table
+- Indexed by workspace and status
+- Memory count maintained via triggers
+
+**Performance:**
+- Active session cached per workspace
+- Session stats computed on-demand
+- History queries optimized with indexes
+
+**Lifecycle:**
+- Sessions created implicitly or explicitly
+- Auto-expiration after inactivity
+- Historical sessions preserved
+- Configurable retention policy
 
 ### Troubleshooting
 

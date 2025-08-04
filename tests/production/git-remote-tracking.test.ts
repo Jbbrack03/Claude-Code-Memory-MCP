@@ -4,7 +4,12 @@ import { GitIntegration } from "../../src/git/integration.js";
 import { execSync } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { config } from "../../src/config/index.js";
+
+// ESM compatibility
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('Production Git Remote Tracking Tests', () => {
   let gitMonitor: GitMonitor;

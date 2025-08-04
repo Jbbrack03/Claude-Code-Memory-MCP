@@ -255,12 +255,12 @@ export class MetricsEndpoint {
       if (allowedIP.includes('/')) {
         // CIDR notation - simplified check
         const [network, prefix] = allowedIP.split('/');
-        const prefixLength = parseInt(prefix, 10);
+        const prefixLength = parseInt(prefix || '24', 10);
         
         // For simplicity, just check if the client IP starts with the network part
         // In a real implementation, you'd do proper CIDR matching
         if (prefixLength >= 24) {
-          const networkPrefix = network.split('.').slice(0, 3).join('.');
+          const networkPrefix = network?.split('.').slice(0, 3).join('.') || '';
           const clientPrefix = clientIP.split('.').slice(0, 3).join('.');
           return networkPrefix === clientPrefix;
         }

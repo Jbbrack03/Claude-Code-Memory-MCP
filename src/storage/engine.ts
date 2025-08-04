@@ -292,6 +292,13 @@ export class StorageEngine {
     return this.vectorStore;
   }
 
+  getDatabase(): SQLiteDatabase | null {
+    if (!this.initialized || !this.sqlite) {
+      return null;
+    }
+    return this.sqlite;
+  }
+
   async close(): Promise<void> {
     logger.info("Closing storage engine...");
     

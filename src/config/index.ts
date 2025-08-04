@@ -110,6 +110,18 @@ const ConfigSchema = z.object({
       maxSize: z.number().default(15000), // 15KB
       includeMetadata: z.boolean().default(true),
       deduplication: z.boolean().default(true)
+    }),
+
+    // Model memory limiter configuration
+    memoryLimiter: z.object({
+      maxMemoryMB: z.number().default(512),
+      fallbackModels: z.array(z.string()).default([
+        "Xenova/all-MiniLM-L6-v2",
+        "Xenova/all-MiniLM-L12-v2"
+      ]),
+      monitoringInterval: z.number().default(1000),
+      emergencyCleanup: z.boolean().default(true),
+      loadTimeout: z.number().default(30000)
     })
   }),
 
@@ -285,6 +297,13 @@ function loadConfig() {
         maxSize: process.env.CONTEXT_MAX_SIZE ? parseInt(process.env.CONTEXT_MAX_SIZE) : undefined,
         includeMetadata: process.env.CONTEXT_INCLUDE_METADATA !== "false",
         deduplication: process.env.CONTEXT_DEDUPLICATION !== "false"
+      },
+      memoryLimiter: {
+        maxMemoryMB: process.env.MODEL_MEMORY_LIMIT_MB ? parseInt(process.env.MODEL_MEMORY_LIMIT_MB) : undefined,
+        fallbackModels: process.env.MODEL_FALLBACK_MODELS?.split(","),
+        monitoringInterval: process.env.MODEL_MEMORY_MONITORING_INTERVAL ? parseInt(process.env.MODEL_MEMORY_MONITORING_INTERVAL) : undefined,
+        emergencyCleanup: process.env.MODEL_MEMORY_EMERGENCY_CLEANUP !== "false",
+        loadTimeout: process.env.MODEL_LOAD_TIMEOUT ? parseInt(process.env.MODEL_LOAD_TIMEOUT) : undefined
       }
     },
     performance: {

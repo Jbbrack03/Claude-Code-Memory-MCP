@@ -118,9 +118,18 @@ describe('SQLiteDatabase', () => {
       ];
       
       // When: Batch insert fails
-      await expect(db.storeMemories(memories)).rejects.toThrow();
+      let error: Error | null = null;
+      try {
+        await db.storeMemories(memories);
+      } catch (e) {
+        error = e as Error;
+      }
       
-      // Then: No memories were stored
+      // Then: Should have thrown an error
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/NOT NULL constraint failed/);
+      
+      // And: No memories were stored (transaction rolled back)
       const count = await db.count('memories');
       expect(count).toBe(0);
     });

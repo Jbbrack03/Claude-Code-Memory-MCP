@@ -14,9 +14,10 @@ The Claude Code Memory MCP Server is designed as a modular, defensive system wit
 ├─────────┬───────────┬────────────┬────────────┬────────────┤
 │  Hook   │  Storage  │    Git     │Intelligence│  Monitor   │
 │ System  │  Engine   │Integration │   Layer    │  System    │
-├─────────┴───────────┴────────────┴────────────┴────────────┤
-│              Transaction Manager & Validation               │
-├─────────────────────────────────────────────────────────────┤
+├─────────┴─────┬─────┴────────────┴─────┬──────┴────────────┤
+│   Workspace   │                         │     Session       │
+│   Manager     │  Transaction Manager    │     Manager       │
+├───────────────┴─────────────────────────┴───────────────────┤
 │         SQLite      │    Vector DB    │   File System      │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -58,6 +59,20 @@ The Claude Code Memory MCP Server is designed as a modular, defensive system wit
 - Performance monitoring
 - Resource usage tracking
 - Self-healing mechanisms
+
+### 7. Workspace Manager
+- Workspace detection and initialization
+- Project isolation enforcement
+- Workspace metadata management
+- Resource allocation per workspace
+- Cleanup and retention policies
+
+### 8. Session Manager
+- Session lifecycle management
+- Activity tracking and expiration
+- Session continuity across operations
+- Historical session preservation
+- Session-based memory filtering
 
 ## Data Flow
 
@@ -132,3 +147,97 @@ Tool Invocation
 - Automatic data archival
 - Intelligent forgetting of old data
 - Progressive loading strategies
+
+## Component Interaction Diagrams
+
+### Workspace and Session Lifecycle
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Claude    │     │  Workspace   │     │   Session    │
+│    Code     │     │   Manager    │     │   Manager    │
+└──────┬──────┘     └──────┬───────┘     └──────┬───────┘
+       │                   │                     │
+       │ detect workspace  │                     │
+       ├──────────────────►│                     │
+       │                   │                     │
+       │                   │ initialize          │
+       │                   ├────────────────────►│
+       │                   │                     │
+       │                   │ create session      │
+       │                   │◄────────────────────┤
+       │                   │                     │
+       │ workspace ready   │                     │
+       │◄──────────────────┤                     │
+       │                   │                     │
+```
+
+### Memory Capture with Workspace/Session Context
+```
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│   Hook   │  │Workspace │  │ Session  │  │ Storage  │  │   Git    │
+│  System  │  │ Manager  │  │ Manager  │  │  Engine  │  │  Integ   │
+└────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+     │             │             │             │             │
+     │ event       │             │             │             │
+     ├────────────►│             │             │             │
+     │             │             │             │             │
+     │             │ get context │             │             │
+     │             ├────────────►│             │             │
+     │             │             │             │             │
+     │             │ workspace/  │             │             │
+     │             │ session     │             │             │
+     │             │◄────────────┤             │             │
+     │             │             │             │             │
+     │ validate    │             │             │             │
+     ├─────────────┼─────────────┼────────────►│             │
+     │             │             │             │             │
+     │             │             │             │ git state   │
+     │             │             │             ├────────────►│
+     │             │             │             │             │
+     │             │             │             │ validated   │
+     │             │             │             │◄────────────┤
+     │             │             │             │             │
+     │             │             │ update      │             │
+     │             │             │ activity    │             │
+     │             │             │◄────────────┤             │
+     │             │             │             │             │
+     │ stored      │             │             │             │
+     │◄────────────┼─────────────┼─────────────┤             │
+```
+
+### Context Building with Session History
+```
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│   MCP    │  │ Session  │  │Workspace │  │ Storage  │  │  Intel   │
+│  Server  │  │ Manager  │  │ Manager  │  │  Engine  │  │  Layer   │
+└────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+     │             │             │             │             │
+     │ context req │             │             │             │
+     ├────────────►│             │             │             │
+     │             │             │             │             │
+     │             │ get active  │             │             │
+     │             │ session     │             │             │
+     │             ├────────────►│             │             │
+     │             │             │             │             │
+     │             │ workspace   │             │             │
+     │             │ context     │             │             │
+     │             │◄────────────┤             │             │
+     │             │             │             │             │
+     │             │ query with  │             │             │
+     │             │ filters     │             │             │
+     │             ├─────────────┼────────────►│             │
+     │             │             │             │             │
+     │             │             │             │ semantic    │
+     │             │             │             │ search      │
+     │             │             │             ├────────────►│
+     │             │             │             │             │
+     │             │             │             │ relevance   │
+     │             │             │             │ scores      │
+     │             │             │             │◄────────────┤
+     │             │             │             │             │
+     │             │ memories    │             │             │
+     │             │◄────────────┼─────────────┤             │
+     │             │             │             │             │
+     │ context     │             │             │             │
+     │◄────────────┤             │             │             │
+```
