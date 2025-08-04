@@ -97,7 +97,7 @@ The server consists of five main subsystems initialized in `src/server/index.ts`
 
 ## Implementation Status
 
-The project follows TDD with an 8-phase implementation plan (see IMPLEMENTATION.md):
+The project follows TDD with a 16-phase implementation plan (see IMPLEMENTATION PLAN.md):
 - ✅ Phase 1: Storage Engine Foundation (COMPLETE)
 - ✅ Phase 2: Hook System Implementation (COMPLETE)
 - ✅ Phase 3: Git Integration (COMPLETE - fully implemented with tests)
