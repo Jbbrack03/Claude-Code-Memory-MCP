@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2025-08-04
+
+### Added
+- **Metrics Endpoint**: New HTTP endpoint for Prometheus metrics exposure
+  - Created `MetricsEndpoint` class with authentication and IP whitelisting support
+  - Content negotiation for Prometheus and JSON formats
+  - Health and readiness check endpoints
+  - Security features including basic auth and IP restrictions
+
+### Fixed
+- **API Method Mismatches**: Corrected all test API calls to match implementation
+  - Fixed `storeMemory()` → `captureMemory()` in performance benchmarks
+  - Fixed `MemoryManager.stop()` → `stopMonitoring()` method calls
+  - Updated `registerHandler()` method signatures to match implementation
+- **Module Resolution**: Created missing `metrics-endpoint.ts` module expected by tests
+- **Test Reliability**: Comprehensive timeout helpers prevent hanging operations
+  - Added `withTimeout()` function with automatic cleanup on timeout
+  - Resource lifecycle tracking with TestCleanupManager integration
+  - Timeout statistics and monitoring capabilities
+
+### Enhanced
+- **Test Infrastructure**: Production-ready timeout and cleanup patterns
+  - Comprehensive usage examples and documentation
+  - Jest integration with automatic timeout restoration
+  - Resource cleanup on process exit handling
+  - Graceful degradation when cleanup managers fail
+
 ## [0.13.1] - 2025-08-04
 
 ### Fixed

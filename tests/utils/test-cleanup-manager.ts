@@ -49,6 +49,14 @@ export interface ResourceStatistics {
   resourcesByType: Record<ResourceType, number>;
 }
 
+export interface TimeoutStatistics {
+  totalTimeouts: number;
+  activeTimeouts: number;
+  expiredTimeouts: number;
+  averageTimeoutDuration: number;
+  oldestTimeout?: TimeoutResource;
+}
+
 export class TestCleanupManager {
   private resources: Map<string, CleanupResource> = new Map();
   private timeoutResources: TimeoutResource[] = [];
@@ -247,6 +255,36 @@ export class TestCleanupManager {
     }
 
     return stats;
+  }
+
+  getTimeoutStatistics(): TimeoutStatistics {
+    const now = Date.now();
+    const expiredTimeouts = this.timeoutResources.filter(resource => 
+      (now - resource.startTime) > resource.timeoutMs
+    );
+    const activeTimeouts = this.timeoutResources.filter(resource => 
+      (now - resource.startTime) <= resource.timeoutMs
+    );
+
+    const totalDuration = this.timeoutResources.reduce((sum, resource) => sum + resource.timeoutMs, 0);
+    const averageTimeoutDuration = this.timeoutResources.length > 0 
+      ? totalDuration / this.timeoutResources.length 
+      : 0;
+
+    const oldestTimeout = this.timeoutResources.reduce((oldest, resource) => {
+      if (!oldest || resource.startTime < oldest.startTime) {
+        return resource;
+      }
+      return oldest;
+    }, undefined as TimeoutResource | undefined);
+
+    return {
+      totalTimeouts: this.timeoutResources.length,
+      activeTimeouts: activeTimeouts.length,
+      expiredTimeouts: expiredTimeouts.length,
+      averageTimeoutDuration,
+      oldestTimeout
+    };
   }
 
   async dispose(): Promise<void> {

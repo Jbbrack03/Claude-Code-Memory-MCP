@@ -13,7 +13,7 @@ const config = {
   detectOpenHandles: true, // Find hanging operations
   forceExit: true, // Force exit after tests complete
   bail: 1, // Stop on first failure to prevent hanging
-  // testSequencer: './tests/utils/test-sequencer.cjs', // Disabled temporarily
+  testSequencer: './tests/utils/test-sequencer.cjs', // Custom sequencer for performance
   // setupFilesAfterEnv: ['<rootDir>/tests/setup-enhanced.ts'], // Disabled temporarily
   moduleNameMapper: {
     '^(\\.{1,2}/.+)\\.js$': '$1',

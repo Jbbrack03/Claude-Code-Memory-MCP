@@ -137,7 +137,7 @@ describe('System Integration Performance Benchmarks', () => {
   afterEach(async () => {
     if (storageEngine) await storageEngine.close();
     if (connectionPool) await connectionPool.shutdown();
-    if (memoryManager) await memoryManager.stop();
+    if (memoryManager) await memoryManager.stopMonitoring();
     if (batchProcessor) await batchProcessor.stop();
     
     MemoryManager.resetInstance();
@@ -164,7 +164,7 @@ describe('System Integration Performance Benchmarks', () => {
 
       // Store memories using batch processing
       const storePromises = testMemories.map(memory => 
-        storageEngine.storeMemory(memory)
+        storageEngine.captureMemory(memory)
       );
       await Promise.all(storePromises);
 
@@ -232,7 +232,7 @@ describe('System Integration Performance Benchmarks', () => {
       }));
 
       for (const memory of memories) {
-        await storageEngine.storeMemory(memory);
+        await storageEngine.captureMemory(memory);
       }
 
       const concurrentQueries = 50;
@@ -324,7 +324,7 @@ describe('System Integration Performance Benchmarks', () => {
             createdAt: new Date(),
             updatedAt: new Date()
           };
-          return storageEngine.storeMemory(memory);
+          return storageEngine.captureMemory(memory);
         }),
 
         // Cache operations
@@ -369,18 +369,17 @@ describe('System Integration Performance Benchmarks', () => {
       let cleanupExecuted = false;
 
       // Register cleanup handler
-      memoryManager.registerCleanupHandler({
-        name: 'integration-cleanup',
-        handler: async () => {
+      memoryManager.registerHandler(
+        'integration-cleanup',
+        async () => {
           cleanupExecuted = true;
           await cache.clear();
           if ((global as any).gc) {
             (global as any).gc();
           }
         },
-        priority: 1,
-        level: 'medium'
-      });
+        { priority: 1, level: 'medium' }
+      );
 
       // Create memory pressure
       const largeData: any[] = [];
@@ -435,7 +434,7 @@ describe('System Integration Performance Benchmarks', () => {
           updatedAt: new Date()
         };
 
-        await storageEngine.storeMemory(memory);
+        await storageEngine.captureMemory(memory);
         
         // Query without caching
         await storageEngine.queryMemories(`content ${i}`, {}, 5);
@@ -513,7 +512,7 @@ describe('System Integration Performance Benchmarks', () => {
               createdAt: new Date(),
               updatedAt: new Date()
             };
-            return storageEngine.storeMemory(memory);
+            return storageEngine.captureMemory(memory);
           } else if (globalIndex % 3 === 1) {
             // Query operation
             return storageEngine.queryMemories('sustained', {}, 5);
@@ -563,7 +562,7 @@ describe('System Integration Performance Benchmarks', () => {
 
         // Store memories
         const storeStartTime = performance.now();
-        await Promise.all(memories.map(memory => storageEngine.storeMemory(memory)));
+        await Promise.all(memories.map(memory => storageEngine.captureMemory(memory)));
         const storeEndTime = performance.now();
 
         // Test query performance at this volume
@@ -611,7 +610,7 @@ describe('System Integration Performance Benchmarks', () => {
         updatedAt: new Date()
       }));
 
-      await Promise.all(baseMemories.map(memory => storageEngine.storeMemory(memory)));
+      await Promise.all(baseMemories.map(memory => storageEngine.captureMemory(memory)));
 
       for (const concurrency of concurrencyLevels) {
         const latencies: number[] = [];
@@ -635,7 +634,7 @@ describe('System Integration Performance Benchmarks', () => {
                 createdAt: new Date(),
                 updatedAt: new Date()
               };
-              await storageEngine.storeMemory(memory);
+              await storageEngine.captureMemory(memory);
             }
             
             const endTime = performance.now();
@@ -687,15 +686,14 @@ describe('System Integration Performance Benchmarks', () => {
 
       // Configure memory pressure monitoring
       let memoryCleanupTriggered = false;
-      memoryManager.registerCleanupHandler({
-        name: 'extreme-load-cleanup',
-        handler: async () => {
+      memoryManager.registerHandler(
+        'extreme-load-cleanup',
+        async () => {
           memoryCleanupTriggered = true;
           await cache.clear();
         },
-        priority: 1,
-        level: 'high'
-      });
+        { priority: 1, level: 'high' }
+      );
 
       const startTime = performance.now();
 
@@ -729,7 +727,7 @@ describe('System Integration Performance Benchmarks', () => {
               updatedAt: new Date()
             };
 
-            await storageEngine.storeMemory(memory);
+            await storageEngine.captureMemory(memory);
             
             // Also test querying under load
             if (operationId % 5 === 0) {
