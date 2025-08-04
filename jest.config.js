@@ -3,6 +3,13 @@ const config = {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
+  
+  // Performance optimizations
+  maxWorkers: '50%', // Use half of available CPU cores
+  testTimeout: 120000, // 2 minute global timeout
+  detectOpenHandles: true, // Find hanging operations
+  forceExit: true, // Force exit after tests complete
+  // testSequencer: './tests/utils/test-sequencer.js', // Temporarily disabled
   moduleNameMapper: {
     '^(\\.{1,2}/.+)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js',

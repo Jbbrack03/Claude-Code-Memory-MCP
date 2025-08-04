@@ -64,7 +64,7 @@ export async function setupTestEnvironment(config: TestEnvironmentConfig = {}): 
 }
 
 /**
- * Teardown test environment and cleanup resources  
+ * Teardown test environment and cleanup resources
  */
 export async function teardownTestEnvironment(): Promise<void> {
   if (globalCleanupManager) {
