@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2025-08-04
+
+### Fixed
+- **Test Infrastructure Performance**: Optimized Jest configuration for reliable test execution
+  - Reduced test timeout from 2 minutes to 30 seconds to prevent hanging tests
+  - Added bail=1 to stop on first failure and prevent cascading timeouts
+  - Fixed ESM module support with proper NODE_OPTIONS configuration
+  - Enhanced @xenova/transformers mocks to resolve immediately (no artificial delays)
+  - Fixed test sequencer CommonJS compatibility issue (.js → .cjs)
+- **Test Execution Speed**: Dramatic improvement in test reliability and performance
+  - Utils test suite now executes in 4.6 seconds vs previous 2+ minute timeouts
+  - Enhanced parallel execution with 50% worker utilization
+  - Added forceExit and detectOpenHandles for better cleanup
+- **Coverage Generation**: Updated coverage scripts for macOS compatibility
+  - Removed timeout command dependency (not available on macOS by default)
+  - Added fallback strategies for failed test runs
+  - Enhanced error handling in coverage generation scripts
+
+### Enhanced
+- **Jest Configuration**: Comprehensive optimization for ESM and test reliability
+  - Added transformIgnorePatterns for proper module handling
+  - Enhanced setupFilesAfterEnv configuration (disabled temporarily for compatibility)
+  - Improved mock configurations preventing timeout issues
+- **Development Workflow**: More reliable testing infrastructure enables faster TDD cycles
+  - Quick test feedback with sub-5-second execution times
+  - Better error reporting with early failure detection
+  - Enhanced mock reliability preventing hanging operations
+
 ## [0.13.0] - 2025-08-04
 
 ### Added

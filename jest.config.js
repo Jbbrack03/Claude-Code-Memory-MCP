@@ -3,13 +3,18 @@ const config = {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   extensionsToTreatAsEsm: ['.ts'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(@xenova/transformers|hnswlib-node)/)'
+  ],
   
   // Performance optimizations
   maxWorkers: '50%', // Use half of available CPU cores
-  testTimeout: 120000, // 2 minute global timeout
+  testTimeout: 30000, // 30 second global timeout (reduced from 2 minutes)
   detectOpenHandles: true, // Find hanging operations
   forceExit: true, // Force exit after tests complete
-  // testSequencer: './tests/utils/test-sequencer.js', // Temporarily disabled
+  bail: 1, // Stop on first failure to prevent hanging
+  // testSequencer: './tests/utils/test-sequencer.cjs', // Disabled temporarily
+  // setupFilesAfterEnv: ['<rootDir>/tests/setup-enhanced.ts'], // Disabled temporarily
   moduleNameMapper: {
     '^(\\.{1,2}/.+)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.js',

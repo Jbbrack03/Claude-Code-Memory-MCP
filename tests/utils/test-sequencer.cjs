@@ -1,5 +1,5 @@
 // Use CommonJS for Jest sequencer compatibility
-const { Sequencer } = require('@jest/test-sequencer');
+const Sequencer = require('@jest/test-sequencer').default;
 
 class CustomSequencer extends Sequencer {
   sort(tests) {
