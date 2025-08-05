@@ -14,6 +14,14 @@ export interface WorkspaceMetadata {
   detectedAt: Date;
 }
 
+export interface WorkspaceConfig {
+  storageEnabled: boolean;
+  memoryLimit: number;
+  sessionTimeout: number;
+  gitIntegration: boolean;
+  [key: string]: unknown;
+}
+
 export class WorkspaceManager {
   private workspaceCache: Map<string, WorkspaceMetadata> = new Map();
   private git?: GitIntegration;
@@ -107,6 +115,71 @@ export class WorkspaceManager {
 
     // Update cache with new workspace as most recent
     await this.cacheWorkspace(newWorkspaceId, 'directory');
+  }
+
+  async initializeWorkspace(workspacePath: string): Promise<void> {
+    logger.info('Initializing workspace', { workspacePath });
+    
+    // Validate path exists
+    try {
+      await fs.access(workspacePath);
+    } catch (error) {
+      throw new Error(`Workspace path does not exist: ${workspacePath}`);
+    }
+    
+    // Detect and cache workspace
+    await this.detectWorkspace(workspacePath);
+    
+    logger.info('Workspace initialized', { workspacePath });
+  }
+
+  async getWorkspaceConfig(workspaceId?: string): Promise<WorkspaceConfig> {
+    const workspace = workspaceId || this.getCurrentCachedWorkspace();
+    
+    // Default configuration
+    const defaultConfig: WorkspaceConfig = {
+      storageEnabled: true,
+      memoryLimit: 100 * 1024 * 1024, // 100MB
+      sessionTimeout: 30 * 60 * 1000, // 30 minutes
+      gitIntegration: true
+    };
+
+    if (!workspace) {
+      return defaultConfig;
+    }
+
+    // Try to load workspace-specific config
+    try {
+      const configPath = path.join(workspace, '.claude-memory-config.json');
+      const configContent = await fs.readFile(configPath, 'utf-8');
+      const workspaceConfig = JSON.parse(configContent) as Partial<WorkspaceConfig>;
+      
+      return { ...defaultConfig, ...workspaceConfig };
+    } catch (error) {
+      logger.debug('No workspace config found, using defaults', { workspace, error });
+      return defaultConfig;
+    }
+  }
+
+  async updateWorkspaceMetadata(workspaceId: string, metadata: Record<string, unknown>): Promise<void> {
+    logger.info('Updating workspace metadata', { workspaceId, metadata });
+    
+    const existing = await this.getWorkspaceMetadata(workspaceId);
+    const updated = { ...existing, ...metadata, id: workspaceId };
+    
+    this.workspaceCache.set(workspaceId, updated);
+    
+    // Optionally persist to workspace config file
+    try {
+      const configPath = path.join(workspaceId, '.claude-memory-config.json');
+      const config = await this.getWorkspaceConfig(workspaceId);
+      config.metadata = metadata;
+      
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      logger.debug('Workspace metadata persisted', { workspaceId });
+    } catch (error) {
+      logger.debug('Failed to persist workspace metadata', { workspaceId, error });
+    }
   }
 
   clearCache(): void {

@@ -130,7 +130,7 @@ export class ModelMemoryLimiter {
     logger.debug("ModelMemoryLimiter created", { config: this.config });
   }
   
-  initialize(): void {
+  async initialize(): Promise<void> {
     if (this.initialized) {
       logger.debug("ModelMemoryLimiter already initialized");
       return;
@@ -212,7 +212,7 @@ export class ModelMemoryLimiter {
     if (totalUsedMemory + estimatedMemory > this.config.maxMemoryMB) {
       // Trigger emergency cleanup if enabled before trying fallbacks
       if (this.config.emergencyCleanup) {
-        this.emergencyCleanup();
+        await this.emergencyCleanup();
         
         // Recalculate after cleanup
         const newTotalUsedMemory = this.currentMemoryMB + this.reservedMemoryMB;
@@ -257,7 +257,7 @@ export class ModelMemoryLimiter {
     }
   }
   
-  unloadModel(modelId: string): ModelUnloadResult {
+  async unloadModel(modelId: string): Promise<ModelUnloadResult> {
     if (!this.initialized) {
       throw new Error("ModelMemoryLimiter not initialized");
     }
@@ -307,7 +307,7 @@ export class ModelMemoryLimiter {
     return utilizationPercent > 80; // Consider 80% as high pressure
   }
   
-  emergencyCleanup(): void {
+  async emergencyCleanup(): Promise<void> {
     if (!this.initialized) {
       return;
     }
@@ -336,7 +336,7 @@ export class ModelMemoryLimiter {
           break;
         }
         
-        const unloadResult = this.unloadModel(modelId);
+        const unloadResult = await this.unloadModel(modelId);
         if (unloadResult.success) {
           memoryFreed += unloadResult.memoryFreed;
           modelsUnloaded++;
@@ -397,7 +397,7 @@ export class ModelMemoryLimiter {
     this.simulateCleanupFailureFlag = true;
   }
   
-  close(): void {
+  async close(): Promise<void> {
     if (this.closed) {
       return;
     }
@@ -412,7 +412,7 @@ export class ModelMemoryLimiter {
       if (!this.simulateCleanupFailureFlag) {
         const modelIds = Array.from(this.loadedModels.keys());
         for (const modelId of modelIds) {
-          this.unloadModel(modelId);
+          await this.unloadModel(modelId);
         }
       }
       
@@ -621,11 +621,10 @@ export class ModelMemoryLimiter {
         
         // Check for memory pressure and trigger cleanup if needed
         if (this.config.emergencyCleanup && this.isMemoryUnderPressure()) {
-          try {
-            this.emergencyCleanup();
-          } catch (error) {
+          // Use void to handle async call without waiting
+          void this.emergencyCleanup().catch(error => {
             logger.error("Emergency cleanup failed", { error });
-          }
+          });
         }
       } catch (error) {
         this.monitoringErrors++;

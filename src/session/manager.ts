@@ -297,6 +297,52 @@ export class SessionManager {
     return toRemove.length;
   }
 
+  getActiveSession(workspaceId?: string): Session | null {
+    // If workspace ID provided, find active session for that workspace
+    if (workspaceId) {
+      return this.findActiveSession(workspaceId);
+    }
+    
+    // Otherwise, return any active session (most recent)
+    const activeSessions = this.getActiveSessions();
+    if (activeSessions.length === 0) {
+      return null;
+    }
+    
+    // Sort by last activity and return most recent
+    activeSessions.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
+    return activeSessions[0] || null;
+  }
+
+  getSessionHistory(workspaceId: string, limit: number = 50): Session[] {
+    logger.debug('Getting session history', { workspaceId, limit });
+    
+    const history: Session[] = [];
+    
+    // Get sessions from memory
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId) {
+        history.push(session);
+      }
+    }
+    
+    // Get sessions from database if enabled
+    if (this.config.persistSessions && this.db) {
+      const persistedSessions = this.loadSessionHistory(workspaceId, limit);
+      
+      // Merge with in-memory sessions, avoiding duplicates
+      for (const session of persistedSessions) {
+        if (!this.sessions.has(session.id)) {
+          history.push(session);
+        }
+      }
+    }
+    
+    // Sort by start time (newest first) and limit
+    history.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
+    return history.slice(0, limit);
+  }
+
   close(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -409,5 +455,24 @@ export class SessionManager {
       'UPDATE sessions SET is_active = 0, end_time = ? WHERE id = ?',
       [session.endTime?.toISOString() || new Date().toISOString(), session.id]
     );
+  }
+
+  private loadSessionHistory(workspaceId: string, limit: number): Session[] {
+    if (!this.db) return [];
+
+    const rows = this.db.all(
+      'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY start_time DESC LIMIT ?',
+      [workspaceId, limit]
+    ) as SessionRow[];
+
+    return rows.map(row => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      startTime: new Date(row.start_time),
+      lastActivity: new Date(row.last_activity),
+      endTime: row.end_time ? new Date(row.end_time) : undefined,
+      metadata: JSON.parse(row.metadata || '{}') as Record<string, unknown>,
+      isActive: row.is_active === 1
+    }));
   }
 }
