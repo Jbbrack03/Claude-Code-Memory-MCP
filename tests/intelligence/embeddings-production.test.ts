@@ -5,11 +5,21 @@ import * as transformersModule from "@xenova/transformers";
 // Mock @xenova/transformers
 jest.mock("@xenova/transformers");
 
-describe('EmbeddingGenerator', () => {
+/**
+ * Tests for EmbeddingGenerator production behavior with mocked dependencies
+ * This file tests the integration with @xenova/transformers using mocks
+ * 
+ * @jest-environment node
+ */
+describe('EmbeddingGenerator - Production Logic', () => {
   let generator: EmbeddingGenerator;
   let mockPipeline: jest.Mock;
+  const originalNodeEnv = process.env.NODE_ENV;
 
   beforeEach(() => {
+    // Set NODE_ENV to development to test production logic with mocks
+    process.env.NODE_ENV = 'development';
+    
     jest.clearAllMocks();
     mockPipeline = jest.fn();
     
@@ -19,9 +29,14 @@ describe('EmbeddingGenerator', () => {
   });
 
   afterEach(async () => {
+    // Restore NODE_ENV
+    process.env.NODE_ENV = originalNodeEnv;
+    
     if (generator) {
       await generator.close().catch(() => {});
     }
+    
+    jest.clearAllMocks();
   });
 
   describe('initialization', () => {

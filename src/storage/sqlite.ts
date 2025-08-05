@@ -137,6 +137,15 @@ export class SQLiteDatabase {
           );`
       },
       {
+        name: '007_update_sessions_schema',
+        sql: `
+          ALTER TABLE sessions ADD COLUMN start_time TEXT;
+          ALTER TABLE sessions ADD COLUMN last_activity TEXT;
+          ALTER TABLE sessions ADD COLUMN end_time TEXT;
+          ALTER TABLE sessions ADD COLUMN is_active INTEGER DEFAULT 1;
+        `
+      },
+      {
         name: '004_git_states_table',
         sql: `
           CREATE TABLE IF NOT EXISTS git_states (

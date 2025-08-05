@@ -26,6 +26,13 @@ export class WorkspaceManager {
     const searchPath = startPath || process.cwd();
     logger.debug('Detecting workspace', { searchPath });
 
+    // Validate that the path exists
+    try {
+      await fs.access(searchPath);
+    } catch (error) {
+      throw new Error(`Workspace path does not exist: ${searchPath}`);
+    }
+
     // Check cache first
     const cached = this.findCachedWorkspace(searchPath);
     if (cached) {

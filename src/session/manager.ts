@@ -35,9 +35,7 @@ export class SessionManager {
     };
     this.db = db;
 
-    if (this.config.persistSessions && this.db) {
-      this.initializeDatabase();
-    }
+    // Note: Database tables are created via migrations in SQLiteDatabase
 
     // Start cleanup interval
     this.startCleanupInterval();
@@ -50,9 +48,18 @@ export class SessionManager {
   async createSession(workspaceId: string, metadata: Record<string, unknown> = {}): Promise<Session> {
     logger.info('Creating new session', { workspaceId });
 
+    // Count active sessions
+    const activeSessions = await this.getActiveSessions();
+    
     // Clean up old sessions if we're at the limit
-    if (this.sessions.size >= this.config.maxActiveSessions) {
+    if (activeSessions.length >= this.config.maxActiveSessions) {
       await this.cleanupInactiveSessions();
+      
+      // Check again after cleanup
+      const activeAfterCleanup = await this.getActiveSessions();
+      if (activeAfterCleanup.length >= this.config.maxActiveSessions) {
+        throw new Error(`Maximum active sessions limit reached: ${this.config.maxActiveSessions}`);
+      }
     }
 
     const session: Session = {
@@ -86,9 +93,10 @@ export class SessionManager {
       }
     }
 
-    if (session && this.isSessionExpired(session)) {
+    if (session && session.isActive && this.isSessionExpired(session)) {
       await this.endSession(sessionId);
-      return null;
+      // Return the now-ended session
+      return this.sessions.get(sessionId) || null;
     }
 
     return session || null;
@@ -158,7 +166,8 @@ export class SessionManager {
         await this.persistSessionEnd(session);
       }
 
-      this.sessions.delete(sessionId);
+      // Keep ended sessions in memory for a short time so they can be retrieved
+      // They will be cleaned up during the next cleanup cycle
     }
   }
 
@@ -177,19 +186,103 @@ export class SessionManager {
   async cleanupInactiveSessions(): Promise<number> {
     logger.debug('Cleaning up inactive sessions');
     
+    const toEnd: string[] = [];
     const toRemove: string[] = [];
 
+    for (const [id, session] of this.sessions) {
+      if (session.isActive && this.isSessionExpired(session)) {
+        // Session is active but expired, need to end it
+        toEnd.push(id);
+      } else if (!session.isActive && session.endTime) {
+        // Session is already ended, remove from memory after a delay
+        const timeSinceEnd = Date.now() - session.endTime.getTime();
+        if (timeSinceEnd > 60000) { // Remove after 1 minute
+          toRemove.push(id);
+        }
+      }
+    }
+
+    // End expired active sessions
+    for (const id of toEnd) {
+      await this.endSession(id);
+    }
+
+    // Remove old ended sessions from memory
+    for (const id of toRemove) {
+      this.sessions.delete(id);
+    }
+
+    const totalCleaned = toEnd.length + toRemove.length;
+    logger.info('Cleaned up sessions', { ended: toEnd.length, removed: toRemove.length, total: totalCleaned });
+    return totalCleaned;
+  }
+
+  async updateActivity(sessionId: string): Promise<void> {
+    logger.debug('Updating session activity', { sessionId });
+    
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.lastActivity = new Date();
+    }
+
+    if (this.config.persistSessions && this.db) {
+      await this.updateSessionActivity(sessionId);
+    }
+  }
+
+  async getActiveSessionsForWorkspace(workspaceId: string): Promise<Session[]> {
+    logger.debug('Getting active sessions for workspace', { workspaceId });
+    
+    const active: Session[] = [];
+
+    // Check in-memory sessions first
+    for (const session of this.sessions.values()) {
+      if (session.workspaceId === workspaceId && 
+          session.isActive && 
+          !this.isSessionExpired(session)) {
+        active.push(session);
+      }
+    }
+
+    // Check persisted sessions if enabled
+    if (this.config.persistSessions && this.db) {
+      const persistedSessions = await this.loadActiveSessionsForWorkspace(workspaceId);
+      for (const session of persistedSessions) {
+        // Only add if not already in memory and not expired
+        if (!this.sessions.has(session.id) && !this.isSessionExpired(session)) {
+          active.push(session);
+          this.sessions.set(session.id, session);
+        }
+      }
+    }
+
+    return active;
+  }
+
+  async cleanupExpiredSessions(): Promise<number> {
+    logger.debug('Cleaning up expired sessions');
+    
+    const toRemove: string[] = [];
+
+    // Check in-memory sessions
     for (const [id, session] of this.sessions) {
       if (!session.isActive || this.isSessionExpired(session)) {
         toRemove.push(id);
       }
     }
 
+    // Clean up persisted expired sessions if enabled
+    if (this.config.persistSessions && this.db) {
+      const expiredCount = await this.cleanupExpiredPersistedSessions();
+      logger.debug('Cleaned up expired persisted sessions', { count: expiredCount });
+    }
+
+    // End in-memory sessions
     for (const id of toRemove) {
       await this.endSession(id);
     }
 
-    logger.info('Cleaned up sessions', { count: toRemove.length });
+    logger.info('Cleaned up expired sessions', { count: toRemove.length });
     return toRemove.length;
   }
 
@@ -216,28 +309,17 @@ export class SessionManager {
     }, 5 * 60 * 1000);
   }
 
-  private initializeDatabase(): void {
-    if (!this.db) return;
+  private async cleanupExpiredPersistedSessions(): Promise<number> {
+    if (!this.db) return 0;
 
-    // Create sessions table if it doesn't exist
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        start_time TEXT NOT NULL,
-        last_activity TEXT NOT NULL,
-        end_time TEXT,
-        metadata TEXT,
-        is_active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    const expiredTime = new Date(Date.now() - this.config.sessionTimeout).toISOString();
+    
+    const result = this.db.run(
+      'UPDATE sessions SET is_active = 0, end_time = ? WHERE is_active = 1 AND last_activity < ?',
+      [new Date().toISOString(), expiredTime]
+    );
 
-    // Create index for workspace queries
-    this.db.run(`
-      CREATE INDEX IF NOT EXISTS idx_sessions_workspace 
-      ON sessions(workspace_id, is_active)
-    `);
+    return result.changes || 0;
   }
 
   private async persistSession(session: Session): Promise<void> {
@@ -245,11 +327,12 @@ export class SessionManager {
 
     this.db.run(
       `INSERT OR REPLACE INTO sessions 
-       (id, workspace_id, start_time, last_activity, end_time, metadata, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (id, workspace_id, started_at, start_time, last_activity, end_time, metadata, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         session.id,
         session.workspaceId,
+        session.startTime.toISOString(), // For the legacy started_at column
         session.startTime.toISOString(),
         session.lastActivity.toISOString(),
         session.endTime?.toISOString() || null,
