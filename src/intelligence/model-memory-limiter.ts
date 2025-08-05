@@ -130,10 +130,10 @@ export class ModelMemoryLimiter {
     logger.debug("ModelMemoryLimiter created", { config: this.config });
   }
   
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     if (this.initialized) {
       logger.debug("ModelMemoryLimiter already initialized");
-      return;
+      return Promise.resolve();
     }
     
     logger.info("Initializing ModelMemoryLimiter", { config: this.config });
@@ -143,6 +143,7 @@ export class ModelMemoryLimiter {
     
     this.initialized = true;
     logger.info("ModelMemoryLimiter initialized successfully");
+    return Promise.resolve();
   }
   
   isInitialized(): boolean {
@@ -257,7 +258,7 @@ export class ModelMemoryLimiter {
     }
   }
   
-  async unloadModel(modelId: string): Promise<ModelUnloadResult> {
+  unloadModel(modelId: string): Promise<ModelUnloadResult> {
     if (!this.initialized) {
       throw new Error("ModelMemoryLimiter not initialized");
     }
@@ -266,11 +267,11 @@ export class ModelMemoryLimiter {
     
     const model = this.loadedModels.get(modelId);
     if (!model) {
-      return {
+      return Promise.resolve({
         success: false,
         memoryFreed: 0,
         error: `Model ${modelId} not found`
-      };
+      });
     }
     
     const memoryFreed = model.memoryMB;
@@ -280,10 +281,10 @@ export class ModelMemoryLimiter {
     
     logger.info("Model unloaded successfully", { modelId, memoryFreed });
     
-    return {
+    return Promise.resolve({
       success: true,
       memoryFreed
-    };
+    });
   }
   
   getMemoryStats(): MemoryStats {
@@ -622,7 +623,7 @@ export class ModelMemoryLimiter {
         // Check for memory pressure and trigger cleanup if needed
         if (this.config.emergencyCleanup && this.isMemoryUnderPressure()) {
           // Use void to handle async call without waiting
-          void this.emergencyCleanup().catch(error => {
+          void this.emergencyCleanup().catch((error: unknown) => {
             logger.error("Emergency cleanup failed", { error });
           });
         }

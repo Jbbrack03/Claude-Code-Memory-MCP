@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.3] - 2025-08-05
+
+### Fixed
+- **Integration Test Reliability**: Fixed workspace-session-managers integration tests
+  - Corrected withTimeout helper usage for synchronous SessionManager methods
+  - Removed unnecessary async/await patterns from synchronous operations
+  - All integration tests now pass consistently
+- **ESLint Compliance**: Fixed remaining ESLint errors in model-memory-limiter.ts
+  - Removed async keyword from methods that don't use await
+  - Added proper typing for error catch handlers
+  - Maintained zero TypeScript and ESLint errors
+
+### Improved
+- **Documentation**: Updated CLAUDE.md with completed phase statuses
+  - Marked Phase 9 (CLI Integration) as COMPLETE
+  - Marked Phase 10 (Workspace and Session Management) as COMPLETE
+  - Marked Phase 14 (Documentation Completeness) as COMPLETE  
+  - Marked Phase 15 (Memory Safety) as COMPLETE
+  - Updated overall implementation status to reflect 13 of 16 phases complete
+
+### Testing
+- **Integration Tests**: All workspace and session manager integration tests passing
+- **Code Quality**: Maintained zero TypeScript and ESLint errors
+- **Test Coverage**: 650+ tests passing across all components
+
 ## [0.15.2] - 2025-08-05
 
 ### Added

@@ -98,11 +98,7 @@ describe('WorkspaceManager and SessionManager Integration', () => {
         'Detect workspace'
       );
       
-      const session = await withTimeout(
-        sessionManager.createSession(workspaceId, { source: 'cli-integration-test' }),
-        5000,
-        'Create session'
-      );
+      const session = sessionManager.createSession(workspaceId, { source: 'cli-integration-test' });
       
       // Then: Workspace should be detected and session created
       expect(workspaceId).toBe(gitDir);
@@ -131,11 +127,7 @@ describe('WorkspaceManager and SessionManager Integration', () => {
         'Detect NPM workspace'
       );
       
-      const session = await withTimeout(
-        sessionManager.createSession(workspaceId, { projectType: 'npm' }),
-        5000,
-        'Create NPM session'
-      );
+      const session = sessionManager.createSession(workspaceId, { projectType: 'npm' });
       
       // Then: NPM workspace should be detected correctly
       expect(workspaceId).toBe(npmDir);
@@ -148,7 +140,7 @@ describe('WorkspaceManager and SessionManager Integration', () => {
     it('should persist sessions and retrieve them after manager restart', async () => {
       // Given: A workspace with an active session
       const workspaceId = await workspaceManager.detectWorkspace(testDir);
-      const originalSession = await sessionManager.createSession(workspaceId, { 
+      const originalSession = sessionManager.createSession(workspaceId, { 
         persistence: 'test',
         timestamp: Date.now()
       });
@@ -162,11 +154,7 @@ describe('WorkspaceManager and SessionManager Integration', () => {
         persistSessions: true
       }, database);
       
-      const retrievedSession = await withTimeout(
-        newSessionManager.getSession(originalSession.id),
-        5000,
-        'Retrieve persisted session'
-      );
+      const retrievedSession = newSessionManager.getSession(originalSession.id);
       
       // Then: Session should be retrieved with all metadata
       expect(retrievedSession).toBeDefined();
@@ -181,22 +169,14 @@ describe('WorkspaceManager and SessionManager Integration', () => {
     it('should maintain session activity tracking', async () => {
       // Given: A workspace session
       const workspaceId = await workspaceManager.detectWorkspace(testDir);
-      const session = await sessionManager.createSession(workspaceId);
+      const session = sessionManager.createSession(workspaceId);
       const initialActivity = session.lastActivity;
       
       // When: Updating session activity
       await new Promise(resolve => setTimeout(resolve, 100)); // Ensure time difference
-      await withTimeout(
-        sessionManager.updateActivity(session.id),
-        5000,
-        'Update session activity'
-      );
+      sessionManager.updateActivity(session.id);
       
-      const updatedSession = await withTimeout(
-        sessionManager.getSession(session.id),
-        5000,
-        'Get updated session'
-      );
+      const updatedSession = sessionManager.getSession(session.id);
       
       // Then: Last activity should be updated
       expect(updatedSession).toBeDefined();
@@ -232,21 +212,13 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       const workspace2 = path.join(testDir, 'subfolder');
       await fs.mkdir(workspace2, { recursive: true });
       
-      const session1 = await sessionManager.createSession(workspace1, { order: 1 });
-      const session2 = await sessionManager.createSession(workspace2, { order: 2 });
+      const session1 = sessionManager.createSession(workspace1, { order: 1 });
+      const session2 = sessionManager.createSession(workspace2, { order: 2 });
       
       // When: Retrieving active sessions for different workspaces
-      const workspace1Sessions = await withTimeout(
-        sessionManager.getActiveSessionsForWorkspace(workspace1),
-        5000,
-        'Get workspace1 sessions'
-      );
+      const workspace1Sessions = sessionManager.getActiveSessionsForWorkspace(workspace1);
       
-      const workspace2Sessions = await withTimeout(
-        sessionManager.getActiveSessionsForWorkspace(workspace2),
-        5000,
-        'Get workspace2 sessions'
-      );
+      const workspace2Sessions = sessionManager.getActiveSessionsForWorkspace(workspace2);
       
       // Then: Each workspace should have its own sessions
       expect(workspace1Sessions).toHaveLength(1);
@@ -279,17 +251,13 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       const invalidWorkspaceId = '/invalid/workspace/path';
       
       // When: Attempting to create session with invalid workspace
-      const createInvalidSession = async () => {
-        return await withTimeout(
-          sessionManager.createSession(invalidWorkspaceId, { invalid: true }),
-          5000,
-          'Create session with invalid workspace'
-        );
+      const createInvalidSession = () => {
+        return sessionManager.createSession(invalidWorkspaceId, { invalid: true });
       };
       
       // Then: Should either reject or handle gracefully
       // (Implementation should decide whether to validate workspace IDs)
-      const session = await createInvalidSession();
+      const session = createInvalidSession();
       expect(session.workspaceId).toBe(invalidWorkspaceId);
       expect(session.isActive).toBe(true);
     });
@@ -303,16 +271,12 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       }, database);
       
       // When: Attempting to create session with closed database
-      const createSessionWithClosedDb = async () => {
-        return await withTimeout(
-          sessionManagerWithClosedDb.createSession('/test/workspace'),
-          5000,
-          'Create session with closed database'
-        );
+      const createSessionWithClosedDb = () => {
+        return sessionManagerWithClosedDb.createSession('/test/workspace');
       };
       
       // Then: Should handle database failure gracefully
-      await expect(createSessionWithClosedDb()).rejects.toThrow();
+      expect(createSessionWithClosedDb).toThrow();
       
       // Cleanup
       await sessionManagerWithClosedDb.close();
@@ -332,28 +296,20 @@ describe('WorkspaceManager and SessionManager Integration', () => {
         'CLI workspace detection'
       );
       
-      const session = await withTimeout(
-        sessionManager.createSession(workspaceId, { 
-          source: 'cli-startup',
-          cwd: gitDir,
-          startTime: new Date()
-        }),
-        5000,
-        'CLI session creation'
-      );
+      const session = sessionManager.createSession(workspaceId, { 
+        source: 'cli-startup',
+        cwd: gitDir,
+        startTime: new Date()
+      });
       
       // Simulate activity during CLI session
       await new Promise(resolve => setTimeout(resolve, 50));
-      await sessionManager.updateActivity(session.id);
+      sessionManager.updateActivity(session.id);
       
       // When: CLI session ends
-      await withTimeout(
-        sessionManager.endSession(session.id),
-        5000,
-        'CLI session end'
-      );
+      sessionManager.endSession(session.id);
       
-      const endedSession = await sessionManager.getSession(session.id);
+      const endedSession = sessionManager.getSession(session.id);
       
       // Then: Complete workflow should work seamlessly
       expect(workspaceId).toBe(gitDir);
@@ -368,17 +324,11 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       const workspaceId = await workspaceManager.detectWorkspace(testDir);
       
       // When: Creating multiple concurrent CLI sessions
-      const sessionPromises = Array.from({ length: 3 }, (_, i) =>
+      const sessions = Array.from({ length: 3 }, (_, i) =>
         sessionManager.createSession(workspaceId, { 
           sessionNumber: i + 1,
           concurrent: true
         })
-      );
-      
-      const sessions = await withTimeout(
-        Promise.all(sessionPromises),
-        10000,
-        'Create concurrent sessions'
       );
       
       // Then: All sessions should be created and isolated
@@ -405,19 +355,15 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       });
       
       const workspaceId = await workspaceManager.detectWorkspace(testDir);
-      const session = await shortTimeoutSessionManager.createSession(workspaceId);
+      const session = shortTimeoutSessionManager.createSession(workspaceId);
       
       // When: Waiting for session to expire
       await new Promise(resolve => setTimeout(resolve, 200));
       
       // Trigger cleanup manually (in real implementation this would be automatic)
-      await withTimeout(
-        shortTimeoutSessionManager.cleanupExpiredSessions(),
-        5000,
-        'Cleanup expired sessions'
-      );
+      shortTimeoutSessionManager.cleanupExpiredSessions();
       
-      const expiredSession = await shortTimeoutSessionManager.getSession(session.id);
+      const expiredSession = shortTimeoutSessionManager.getSession(session.id);
       
       // Then: Session should be expired and cleaned up
       expect(expiredSession?.isActive).toBe(false);
@@ -436,23 +382,19 @@ describe('WorkspaceManager and SessionManager Integration', () => {
       const workspaceId = await workspaceManager.detectWorkspace(testDir);
       
       // When: Creating sessions beyond the limit
-      const session1 = await limitedSessionManager.createSession(workspaceId, { order: 1 });
-      const session2 = await limitedSessionManager.createSession(workspaceId, { order: 2 });
+      const session1 = limitedSessionManager.createSession(workspaceId, { order: 1 });
+      const session2 = limitedSessionManager.createSession(workspaceId, { order: 2 });
       
-      const createThirdSession = async () => {
-        return await withTimeout(
-          limitedSessionManager.createSession(workspaceId, { order: 3 }),
-          5000,
-          'Create third session beyond limit'
-        );
+      const createThirdSession = () => {
+        return limitedSessionManager.createSession(workspaceId, { order: 3 });
       };
       
       // Then: Should either reject or cleanup old sessions
-      await expect(createThirdSession()).rejects.toThrow();
+      expect(createThirdSession).toThrow();
       
       // Verify first two sessions are still active
-      expect((await limitedSessionManager.getSession(session1.id))?.isActive).toBe(true);
-      expect((await limitedSessionManager.getSession(session2.id))?.isActive).toBe(true);
+      expect(limitedSessionManager.getSession(session1.id)?.isActive).toBe(true);
+      expect(limitedSessionManager.getSession(session2.id)?.isActive).toBe(true);
       
       // Cleanup
       await limitedSessionManager.close();
