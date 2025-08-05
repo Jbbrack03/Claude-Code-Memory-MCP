@@ -1,9 +1,7 @@
 import { createLogger } from "../utils/logger.js";
-import hnswlib from 'hnswlib-node';
+import { HierarchicalNSW } from 'hnswlib-node';
 import { promises as fs } from 'fs';
 import path from 'path';
-
-const { HierarchicalNSW } = hnswlib as any;
 
 const logger = createLogger("VectorIndex");
 
@@ -252,7 +250,7 @@ interface SerializedMetadata {
 }
 
 export class ScalableVectorIndexImpl implements ScalableVectorIndex {
-  private index?: any; // HierarchicalNSW instance
+  private index?: HierarchicalNSW;
   private dimension?: number;
   private documents: Map<string, VectorDocument> = new Map();
   private idToIndex: Map<string, number> = new Map();

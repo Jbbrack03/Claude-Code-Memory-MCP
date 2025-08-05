@@ -75,7 +75,7 @@ async function handleInjectContext(args: string[]) {
     const workspaceId = await workspaceManager.detectWorkspace(workspacePath);
     
     // Get or create session using SessionManager
-    const session = await sessionManager.getOrCreateSession(workspaceId, options.session);
+    const session = sessionManager.getOrCreateSession(workspaceId, options.session);
     const sessionId = session.id;
     
     // Build query from context
@@ -94,13 +94,17 @@ async function handleInjectContext(args: string[]) {
     const context = await intelligence.buildContext(memories);
     
     // Output as MCP-compatible format
-    console.log(JSON.stringify({
+    const output = JSON.stringify({
       type: 'context',
       workspaceId,
       sessionId,
       context,
       memoryCount: memories.length
-    }));
+    });
+    
+    // Use process.stdout.write for MCP output, logger for debugging
+    process.stdout.write(output + '\n');
+    logger.debug('Context output sent', { workspaceId, sessionId, memoryCount: memories.length });
     
   } catch (error) {
     logger.error('Failed to inject context:', error);
@@ -129,7 +133,7 @@ async function handleCaptureEvent(args: string[]) {
     const workspaceId = await workspaceManager.detectWorkspace(workspacePath);
     
     // Get or create session using SessionManager
-    const session = await sessionManager.getOrCreateSession(workspaceId, options.session);
+    const session = sessionManager.getOrCreateSession(workspaceId, options.session);
     const sessionId = session.id;
     
     // Get git state
@@ -154,13 +158,17 @@ async function handleCaptureEvent(args: string[]) {
     // Capture memory
     const captured = await storage.captureMemory(memory);
     
-    // Output confirmation
-    console.log(JSON.stringify({
+    // Output confirmation 
+    const output = JSON.stringify({
       type: 'captured',
       memoryId: captured.id,
       workspaceId,
       sessionId
-    }));
+    });
+    
+    // Use process.stdout.write for MCP output, logger for debugging
+    process.stdout.write(output + '\n');
+    logger.debug('Memory capture output sent', { memoryId: captured.id, workspaceId, sessionId });
     
   } catch (error) {
     logger.error('Failed to capture event:', error);

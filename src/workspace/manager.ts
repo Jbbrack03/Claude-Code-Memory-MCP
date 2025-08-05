@@ -193,8 +193,13 @@ export class WorkspaceManager {
     try {
       const packageJsonPath = path.join(workspaceId, 'package.json');
       const content = await fs.readFile(packageJsonPath, 'utf-8');
-      const packageJson = JSON.parse(content);
-      return packageJson.name;
+      const packageJson = JSON.parse(content) as unknown;
+      // Type guard for package.json
+      if (packageJson && typeof packageJson === 'object' && !Array.isArray(packageJson)) {
+        const name = (packageJson as Record<string, unknown>).name;
+        return typeof name === 'string' ? name : undefined;
+      }
+      return undefined;
     } catch (error) {
       logger.debug('Failed to read package.json', error);
       return undefined;

@@ -130,7 +130,7 @@ export class ModelMemoryLimiter {
     logger.debug("ModelMemoryLimiter created", { config: this.config });
   }
   
-  async initialize(): Promise<void> {
+  initialize(): void {
     if (this.initialized) {
       logger.debug("ModelMemoryLimiter already initialized");
       return;
@@ -159,17 +159,19 @@ export class ModelMemoryLimiter {
     }
     
     // Check if this model is already being loaded
-    if (this.loadingPromises.has(modelConfig.modelId)) {
-      return await this.loadingPromises.get(modelConfig.modelId)!;
+    const existingPromise = this.loadingPromises.get(modelConfig.modelId);
+    if (existingPromise) {
+      return await existingPromise;
     }
     
     // Check if model already loaded
-    if (this.loadedModels.has(modelConfig.modelId)) {
+    const existingModel = this.loadedModels.get(modelConfig.modelId);
+    if (existingModel) {
       const loadTimeMs = 1; // Ensure non-zero load time
       return {
         success: true,
         modelId: modelConfig.modelId,
-        actualMemoryMB: this.loadedModels.get(modelConfig.modelId)!.memoryMB,
+        actualMemoryMB: existingModel.memoryMB,
         fallbackUsed: false,
         loadTimeMs
       };
@@ -210,7 +212,7 @@ export class ModelMemoryLimiter {
     if (totalUsedMemory + estimatedMemory > this.config.maxMemoryMB) {
       // Trigger emergency cleanup if enabled before trying fallbacks
       if (this.config.emergencyCleanup) {
-        await this.emergencyCleanup();
+        this.emergencyCleanup();
         
         // Recalculate after cleanup
         const newTotalUsedMemory = this.currentMemoryMB + this.reservedMemoryMB;
@@ -255,7 +257,7 @@ export class ModelMemoryLimiter {
     }
   }
   
-  async unloadModel(modelId: string): Promise<ModelUnloadResult> {
+  unloadModel(modelId: string): ModelUnloadResult {
     if (!this.initialized) {
       throw new Error("ModelMemoryLimiter not initialized");
     }
@@ -305,7 +307,7 @@ export class ModelMemoryLimiter {
     return utilizationPercent > 80; // Consider 80% as high pressure
   }
   
-  async emergencyCleanup(): Promise<void> {
+  emergencyCleanup(): void {
     if (!this.initialized) {
       return;
     }
@@ -334,7 +336,7 @@ export class ModelMemoryLimiter {
           break;
         }
         
-        const unloadResult = await this.unloadModel(modelId);
+        const unloadResult = this.unloadModel(modelId);
         if (unloadResult.success) {
           memoryFreed += unloadResult.memoryFreed;
           modelsUnloaded++;
@@ -395,7 +397,7 @@ export class ModelMemoryLimiter {
     this.simulateCleanupFailureFlag = true;
   }
   
-  async close(): Promise<void> {
+  close(): void {
     if (this.closed) {
       return;
     }
@@ -410,7 +412,7 @@ export class ModelMemoryLimiter {
       if (!this.simulateCleanupFailureFlag) {
         const modelIds = Array.from(this.loadedModels.keys());
         for (const modelId of modelIds) {
-          await this.unloadModel(modelId);
+          this.unloadModel(modelId);
         }
       }
       
@@ -546,41 +548,40 @@ export class ModelMemoryLimiter {
   }
   
   private async loadModelWithTimeout(modelId: string): Promise<{ pipeline: Pipeline; memoryMB: number }> {
-    return new Promise(async (resolve, reject) => {
-      const timeout = setTimeout(() => {
+    // Use Promise.race to implement timeout instead of Promise executor anti-pattern
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
         reject(new Error("timeout"));
       }, this.config.loadTimeout);
-      
-      try {
-        // For testing, simulate different behaviors based on model name
-        if (modelId.includes("slow-loading")) {
-          await new Promise(resolve => setTimeout(resolve, 200)); // Simulate slow loading
-        }
-        
-        if (modelId.includes("invalid") || modelId.includes("nonexistent")) {
-          throw new Error("Model not found");
-        }
-        
-        // Simulate model loading time
-        await new Promise(resolve => setTimeout(resolve, 1));
-        
-        // Load the actual model pipeline
-        const modelPipeline = await pipeline(
-          'feature-extraction',
-          modelId,
-          { device: 'cpu' }
-        );
-        
-        // Estimate memory usage (simplified)
-        const memoryMB = this.estimateModelMemory(modelId);
-        
-        clearTimeout(timeout);
-        resolve({ pipeline: modelPipeline, memoryMB });
-      } catch (error) {
-        clearTimeout(timeout);
-        reject(error);
-      }
     });
+    
+    const loadPromise = async (): Promise<{ pipeline: Pipeline; memoryMB: number }> => {
+      // For testing, simulate different behaviors based on model name
+      if (modelId.includes("slow-loading")) {
+        await new Promise(resolve => setTimeout(resolve, 200)); // Simulate slow loading
+      }
+      
+      if (modelId.includes("invalid") || modelId.includes("nonexistent")) {
+        throw new Error("Model not found");
+      }
+      
+      // Simulate model loading time
+      await new Promise(resolve => setTimeout(resolve, 1));
+      
+      // Load the actual model pipeline
+      const modelPipeline = await pipeline(
+        'feature-extraction',
+        modelId,
+        { device: 'cpu' }
+      );
+      
+      // Estimate memory usage (simplified)
+      const memoryMB = this.estimateModelMemory(modelId);
+      
+      return { pipeline: modelPipeline, memoryMB };
+    };
+    
+    return Promise.race([loadPromise(), timeoutPromise]);
   }
   
   private estimateModelMemory(modelId: string): number {
@@ -620,9 +621,11 @@ export class ModelMemoryLimiter {
         
         // Check for memory pressure and trigger cleanup if needed
         if (this.config.emergencyCleanup && this.isMemoryUnderPressure()) {
-          this.emergencyCleanup().catch(error => {
+          try {
+            this.emergencyCleanup();
+          } catch (error) {
             logger.error("Emergency cleanup failed", { error });
-          });
+          }
         }
       } catch (error) {
         this.monitoringErrors++;

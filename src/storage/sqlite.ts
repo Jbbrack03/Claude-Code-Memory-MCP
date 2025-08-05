@@ -320,11 +320,12 @@ export class SQLiteDatabase {
     return params ? stmt.get(...params) : stmt.get();
   }
 
-  all(query: string): unknown[] {
+  all(query: string, params?: unknown[]): unknown[] {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
-    return this.db.prepare(query).all();
+    const stmt = this.db.prepare(query);
+    return params ? stmt.all(...params) : stmt.all();
   }
 
   run(query: string, params?: unknown[]): Database.RunResult {

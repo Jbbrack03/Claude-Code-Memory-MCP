@@ -114,7 +114,12 @@ export class MetricsEndpoint {
     }
 
     return new Promise((resolve, reject) => {
-      this.server!.close((error) => {
+      if (!this.server) {
+        reject(new Error('Server not initialized'));
+        return;
+      }
+      
+      this.server.close((error) => {
         if (error) {
           reject(error);
         } else {
@@ -156,9 +161,9 @@ export class MetricsEndpoint {
       if (pathname === this.config.path) {
         await this.handleMetricsRequest(req, res);
       } else if (pathname === '/health') {
-        await this.handleHealthRequest(req, res);
+        this.handleHealthRequest(req, res);
       } else if (pathname === '/ready') {
-        await this.handleReadinessRequest(req, res);
+        this.handleReadinessRequest(req, res);
       } else {
         this.sendResponse(res, 404, 'Not Found');
       }
@@ -217,7 +222,7 @@ export class MetricsEndpoint {
     }
   }
 
-  private async handleHealthRequest(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private handleHealthRequest(_req: IncomingMessage, res: ServerResponse): void {
     const health: HealthStatus = {
       status: 'healthy',
       timestamp: new Date().toISOString()
@@ -228,7 +233,7 @@ export class MetricsEndpoint {
     res.end(JSON.stringify(health));
   }
 
-  private async handleReadinessRequest(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private handleReadinessRequest(_req: IncomingMessage, res: ServerResponse): void {
     const metricsEnabled = this.metricsCollector.isEnabled();
     const readiness: ReadinessStatus = {
       ready: metricsEnabled,

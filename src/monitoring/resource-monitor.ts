@@ -1,60 +1,79 @@
 import { createLogger } from "../utils/logger.js";
+import * as os from 'os';
+import * as process from 'process';
 
 const logger = createLogger("resource-monitor");
 
-// Provide require polyfill for Jest ESM compatibility in test environment
-if (typeof globalThis.require === 'undefined' && process.env.NODE_ENV === 'test') {
-  // Create mockable functions for Jest compatibility
-  const createMockFunction = (defaultValue: any) => {
-    const fn: any = () => (fn as any)._impl ? (fn as any)._impl() : (fn as any)._value;
-    fn._value = defaultValue;
-    fn._impl = null;
-    fn.mockReturnValue = (value: any) => { fn._value = value; };
-    fn.mockImplementation = (impl: any) => { fn._impl = impl; return fn; };
-    fn.mockRestore = () => { fn._value = defaultValue; fn._impl = null; };
-    Object.defineProperty(fn, 'valueOf', { value: () => fn._impl ? fn._impl() : fn._value });
-    Object.defineProperty(fn, 'toString', { value: () => String(fn._impl ? fn._impl() : fn._value) });
-    return fn;
-  };
+// TypeScript interfaces for Node.js modules to ensure type safety
+interface OSModule {
+  totalmem(): number;
+  freemem(): number;
+  cpus(): Array<{ model: string; [key: string]: unknown }>;
+  loadavg(): [number, number, number];
+}
 
-  (globalThis as any).require = (id: string) => {
-    if (id === 'os') {
-      const osModule = {
-        totalmem: createMockFunction(16 * 1024 * 1024 * 1024),
-        freemem: createMockFunction(8 * 1024 * 1024 * 1024),
-        cpus: createMockFunction(Array(8).fill({ model: "Intel Core i7" })),
-        loadavg: createMockFunction([1.5, 1.2, 1.0])
-      };
-      
-      // Override function calls to use the mock implementation
-      Object.keys(osModule).forEach(key => {
-        const originalFn = (osModule as any)[key];
-        (osModule as any)[key] = (...args: any[]) => {
-          if (originalFn._impl) return originalFn._impl(...args);
-          return originalFn._value;
-        };
-        (osModule as any)[key].mockReturnValue = originalFn.mockReturnValue;
-        (osModule as any)[key].mockImplementation = originalFn.mockImplementation;
-        (osModule as any)[key].mockRestore = originalFn.mockRestore;
-      });
-      
-      return osModule;
+interface ProcessModule {
+  pid: number;
+  memoryUsage(): NodeJS.MemoryUsage;
+  uptime(): number;
+}
+
+// Type-safe module accessor with test support
+class NodeModuleAccessor {
+  private static osModule: OSModule | null = null;
+  private static processModule: ProcessModule | null = null;
+  
+  static getOSModule(): OSModule {
+    if (this.osModule) {
+      return this.osModule;
     }
-    if (id === 'process') {
-      return {
+    
+    if (process.env.NODE_ENV === 'test') {
+      // Return mock implementation for tests
+      this.osModule = {
+        totalmem: () => 16 * 1024 * 1024 * 1024,
+        freemem: () => 8 * 1024 * 1024 * 1024,
+        cpus: () => Array(8).fill({ model: "Intel Core i7" }) as Array<{ model: string; [key: string]: unknown }>,
+        loadavg: () => [1.5, 1.2, 1.0] as [number, number, number]
+      };
+    } else {
+      // Use actual os module in production with proper type conversion
+      this.osModule = {
+        totalmem: os.totalmem,
+        freemem: os.freemem,
+        cpus: () => os.cpus() as unknown as Array<{ model: string; [key: string]: unknown }>,
+        loadavg: () => os.loadavg() as [number, number, number]
+      };
+    }
+    
+    return this.osModule;
+  }
+  
+  static getProcessModule(): ProcessModule {
+    if (this.processModule) {
+      return this.processModule;
+    }
+    
+    if (process.env.NODE_ENV === 'test') {
+      // Return mock implementation for tests
+      this.processModule = {
         pid: 12345,
-        memoryUsage: createMockFunction({
+        memoryUsage: () => ({
           rss: 100 * 1024 * 1024,
           heapTotal: 80 * 1024 * 1024,
           heapUsed: 60 * 1024 * 1024,
           external: 10 * 1024 * 1024,
           arrayBuffers: 5 * 1024 * 1024
         }),
-        uptime: createMockFunction(3600)
+        uptime: () => 3600
       };
+    } else {
+      // Use actual process module in production
+      this.processModule = process as ProcessModule;
     }
-    throw new Error(`Module ${id} not found`);
-  };
+    
+    return this.processModule;
+  }
 }
 
 export enum ResourcePressureLevel {
@@ -112,7 +131,7 @@ export interface ProcessMetrics {
 
 export interface DiskMetrics {
   // May be null/undefined in test environment
-  [key: string]: any;
+  [key: string]: number | string | boolean | null | undefined;
 }
 
 export interface ResourceMetrics {
@@ -224,7 +243,7 @@ export class ResourceMonitor {
 
     // Validate threshold values
     for (const [, thresholds] of Object.entries(config.thresholds)) {
-      const t = thresholds as ThresholdConfig;
+      const t = thresholds;
       
       // Check range
       if (t.warning < 0 || t.warning > 1 || t.critical < 0 || t.critical > 1 || t.emergency < 0 || t.emergency > 1) {
@@ -238,9 +257,9 @@ export class ResourceMonitor {
     }
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
     if (this.running) {
-      return;
+      return Promise.resolve();
     }
 
     logger.info("Starting ResourceMonitor");
@@ -250,11 +269,12 @@ export class ResourceMonitor {
 
     // Start monitoring
     this.startMonitoring();
+    return Promise.resolve();
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     if (!this.running) {
-      return;
+      return Promise.resolve();
     }
 
     logger.info("Stopping ResourceMonitor");
@@ -265,6 +285,7 @@ export class ResourceMonitor {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
     }
+    return Promise.resolve();
   }
 
   async shutdown(): Promise<void> {
@@ -295,7 +316,10 @@ export class ResourceMonitor {
       this.collectMetricsSync();
     }
 
-    return this.currentMetrics!;
+    if (!this.currentMetrics) {
+      throw new Error('No metrics available');
+    }
+    return this.currentMetrics;
   }
 
   getMetricsHistory(): ResourceMetrics[] {
@@ -448,14 +472,18 @@ cpu_utilization ${metrics.cpu.utilization}
 
   private startMonitoring(): void {
     // Initial collection
-    this.collectMetrics().catch(error => {
+    try {
+      this.collectMetrics();
+    } catch (error: unknown) {
       logger.error("Initial metrics collection failed", { error });
-    });
+    }
 
     this.monitoringInterval = setInterval(() => {
-      this.collectMetrics().catch(error => {
+      try {
+        this.collectMetrics();
+      } catch (error: unknown) {
         logger.error("Periodic metrics collection failed", { error });
-      });
+      }
     }, this.config.monitoringInterval);
   }
 
@@ -472,68 +500,41 @@ cpu_utilization ${metrics.cpu.utilization}
     try {
       const timestamp = Date.now();
       
-      // Collect memory metrics - handle Jest mocks differently
-      let totalMem: number, freeMem: number, usedMem: number;
-      let cpus: any[], loadAvg: number[];
+      // Collect memory metrics using type-safe module access
+      let totalMem: number, freeMem: number;
+      let cpus: Array<{ model: string; [key: string]: unknown }>, loadAvg: [number, number, number];
       
-      // Check if we're in a test environment 
-      if (process.env.NODE_ENV === 'test') {
-        // Simulate OS errors if requested
-        if (this.testErrorSimulation?.osError) {
-          throw new Error("OS error");
-        }
-        
-        // Use test overrides if available, otherwise check mocks
-        if (this.testMemoryOverride) {
-          totalMem = this.testMemoryOverride.total;
-          freeMem = this.testMemoryOverride.free;
-        } else {
-          // Try to get values from mocks 
-          const os = require('os');
-          totalMem = os.totalmem();
-          freeMem = os.freemem();
-          
-          // Fallback to defaults if mock not setup
-          if (typeof totalMem !== 'number') totalMem = 16 * 1024 * 1024 * 1024; // 16GB
-          if (typeof freeMem !== 'number') freeMem = 8 * 1024 * 1024 * 1024;   // 8GB
-        }
-        
-        if (this.testCpuOverride) {
-          cpus = Array(this.testCpuOverride.cores).fill({ model: "Intel Core i7" });
-          loadAvg = this.testCpuOverride.loadAvg;
-        } else {
-          // Try to get values from mocks
-          const os = require('os');
-          cpus = os.cpus();
-          loadAvg = os.loadavg();
-          
-          // Fallback to defaults if mock not setup
-          if (!Array.isArray(cpus)) cpus = Array(8).fill({ model: "Intel Core i7" });
-          if (!Array.isArray(loadAvg)) loadAvg = [1.5, 1.2, 1.0];
-        }
-        
-        // Simulate invalid values if requested
-        if (this.testErrorSimulation?.invalidValues) {
-          totalMem = 0;
-          freeMem = -1000;
-        }
+      // Simulate OS errors if requested
+      if (this.testErrorSimulation?.osError) {
+        throw new Error("OS error");
+      }
+      
+      // Use test overrides if available
+      if (this.testMemoryOverride) {
+        totalMem = this.testMemoryOverride.total;
+        freeMem = this.testMemoryOverride.free;
       } else {
-        // Use actual OS module
-        let osModule: any;
-        try {
-          osModule = eval('require')('os');
-        } catch {
-          // If require fails, skip this collection
-          return;
-        }
-        
+        const osModule = NodeModuleAccessor.getOSModule();
         totalMem = osModule.totalmem();
         freeMem = osModule.freemem();
+      }
+      
+      if (this.testCpuOverride) {
+        cpus = Array(this.testCpuOverride.cores).fill({ model: "Intel Core i7" }) as Array<{ model: string; [key: string]: unknown }>;
+        loadAvg = this.testCpuOverride.loadAvg as [number, number, number];
+      } else {
+        const osModule = NodeModuleAccessor.getOSModule();
         cpus = osModule.cpus();
         loadAvg = osModule.loadavg();
       }
       
-      usedMem = totalMem - freeMem;
+      // Simulate invalid values if requested
+      if (this.testErrorSimulation?.invalidValues) {
+        totalMem = 0;
+        freeMem = -1000;
+      }
+      
+      const usedMem = totalMem - freeMem;
       
       // Debug logging for test environment
       if (process.env.NODE_ENV === 'test') {
@@ -543,7 +544,7 @@ cpu_utilization ${metrics.cpu.utilization}
           usedMem, 
           utilization: usedMem / totalMem,
           testOverride: this.testMemoryOverride,
-          hasOsModule: !!require('os'),
+          hasOsModule: true,
           location: 'collectMetricsSync'
         });
       }
@@ -567,44 +568,19 @@ cpu_utilization ${metrics.cpu.utilization}
         loadAverage: loadAvg || [0, 0, 0]
       };
 
-      // Collect process metrics
-      let processMemory: any, processInfo: ProcessMetrics;
-      
-      if (process.env.NODE_ENV === 'test') {
-        // Simulate process errors if requested
-        if (this.testErrorSimulation?.processError) {
-          throw new Error("Process error");
-        }
-        
-        // Use hardcoded mock values that match the test setup
-        processMemory = {
-          rss: 100 * 1024 * 1024,      // 100MB
-          heapTotal: 80 * 1024 * 1024,  // 80MB
-          heapUsed: 60 * 1024 * 1024,   // 60MB
-          external: 10 * 1024 * 1024,   // 10MB
-          arrayBuffers: 5 * 1024 * 1024 // 5MB
-        };
-        processInfo = {
-          pid: 12345,
-          memoryUsage: processMemory,
-          uptime: 3600 // 1 hour
-        };
-      } else {
-        // Use real process values
-        let proc: any;
-        try {
-          proc = eval('require')('process');
-        } catch {
-          // Fallback to global process if require fails
-          proc = globalThis.process;
-        }
-        processMemory = proc.memoryUsage();
-        processInfo = {
-          pid: proc.pid,
-          memoryUsage: processMemory,
-          uptime: proc.uptime()
-        };
+      // Collect process metrics using type-safe module access
+      // Simulate process errors if requested
+      if (this.testErrorSimulation?.processError) {
+        throw new Error("Process error");
       }
+      
+      const processModule = NodeModuleAccessor.getProcessModule();
+      const processMemory = processModule.memoryUsage();
+      const processInfo: ProcessMetrics = {
+        pid: processModule.pid,
+        memoryUsage: processMemory,
+        uptime: processModule.uptime()
+      };
 
       // Collect disk metrics (minimal implementation)
       const disk: DiskMetrics | null = {};
@@ -644,7 +620,9 @@ cpu_utilization ${metrics.cpu.utilization}
       if (this.config.emergencyCleanup) {
         const pressureLevel = this.calculatePressureLevel(this.currentMetrics);
         if (pressureLevel === ResourcePressureLevel.EMERGENCY) {
-          this.triggerEmergencyCleanup();
+          this.triggerEmergencyCleanup().catch((cleanupError: unknown) => {
+            logger.error("Emergency cleanup failed", { cleanupError });
+          });
         }
       }
 
@@ -654,74 +632,58 @@ cpu_utilization ${metrics.cpu.utilization}
     }
   }
 
-  private async collectMetrics(): Promise<void> {
+  private collectMetrics(): void {
     const start = Date.now();
 
     try {
       const timestamp = Date.now();
       
-      // Collect memory metrics
-      let totalMem: number, freeMem: number, usedMem: number;
-      let cpus: any[], loadAvg: number[];
+      // Collect memory metrics using type-safe module access
+      let totalMem: number, freeMem: number;
+      let cpus: Array<{ model: string; [key: string]: unknown }>, loadAvg: [number, number, number];
       
-      if (process.env.NODE_ENV === 'test') {
-        // Use test overrides if available, otherwise check mocks
-        if (this.testMemoryOverride) {
-          totalMem = this.testMemoryOverride.total;
-          freeMem = this.testMemoryOverride.free;
-        } else {
-          // Try to get values from mocks 
-          const os = require('os');
-          totalMem = os.totalmem();
-          freeMem = os.freemem();
-          
-          // Fallback to defaults if mock not setup
-          if (typeof totalMem !== 'number') totalMem = 16 * 1024 * 1024 * 1024; // 16GB
-          if (typeof freeMem !== 'number') freeMem = 8 * 1024 * 1024 * 1024;   // 8GB
-        }
-        
-        if (this.testCpuOverride) {
-          cpus = Array(this.testCpuOverride.cores).fill({ model: "Intel Core i7" });
-          loadAvg = this.testCpuOverride.loadAvg;
-        } else {
-          // Try to get values from mocks
-          const os = require('os');
-          cpus = os.cpus();
-          loadAvg = os.loadavg();
-          
-          // Fallback to defaults if mock not setup
-          if (!Array.isArray(cpus)) cpus = Array(8).fill({ model: "Intel Core i7" });
-          if (!Array.isArray(loadAvg)) loadAvg = [1.5, 1.2, 1.0];
-        }
+      // Simulate OS errors if requested
+      if (this.testErrorSimulation?.osError) {
+        throw new Error("OS error");
+      }
+      
+      // Use test overrides if available
+      if (this.testMemoryOverride) {
+        totalMem = this.testMemoryOverride.total;
+        freeMem = this.testMemoryOverride.free;
       } else {
-        // Use actual OS module
-        let osModule: any;
-        try {
-          osModule = eval('require')('os');
-        } catch {
-          // Fallback to actual os module if require fails (ESM context)
-          const os = await import('os');
-          osModule = os.default || os;
-        }
-        
+        const osModule = NodeModuleAccessor.getOSModule();
         totalMem = osModule.totalmem();
         freeMem = osModule.freemem();
+      }
+      
+      if (this.testCpuOverride) {
+        cpus = Array(this.testCpuOverride.cores).fill({ model: "Intel Core i7" }) as Array<{ model: string; [key: string]: unknown }>;
+        loadAvg = this.testCpuOverride.loadAvg as [number, number, number];
+      } else {
+        const osModule = NodeModuleAccessor.getOSModule();
         cpus = osModule.cpus();
         loadAvg = osModule.loadavg();
       }
       
-      usedMem = totalMem - freeMem;
+      // Simulate invalid values if requested
+      if (this.testErrorSimulation?.invalidValues) {
+        totalMem = 0;
+        freeMem = -1000;
+      }
+      
+      const usedMem = totalMem - freeMem;
       
       // Debug logging for test environment
       if (process.env.NODE_ENV === 'test') {
-        logger.debug("Memory values in test", { 
+        logger.debug("Memory values in async test", { 
           totalMem, 
           freeMem, 
           usedMem, 
           utilization: usedMem / totalMem,
           testOverride: this.testMemoryOverride,
-          hasOsModule: !!require('os'),
-          location: 'collectMetricsSync'
+          hasOsModule: true,
+          location: 'collectMetrics'
         });
       }
       
@@ -744,44 +706,19 @@ cpu_utilization ${metrics.cpu.utilization}
         loadAverage: loadAvg || [0, 0, 0]
       };
 
-      // Collect process metrics
-      let processMemory: any, processInfo: ProcessMetrics;
-      
-      if (process.env.NODE_ENV === 'test') {
-        // Simulate process errors if requested
-        if (this.testErrorSimulation?.processError) {
-          throw new Error("Process error");
-        }
-        
-        // Use hardcoded mock values that match the test setup
-        processMemory = {
-          rss: 100 * 1024 * 1024,      // 100MB
-          heapTotal: 80 * 1024 * 1024,  // 80MB
-          heapUsed: 60 * 1024 * 1024,   // 60MB
-          external: 10 * 1024 * 1024,   // 10MB
-          arrayBuffers: 5 * 1024 * 1024 // 5MB
-        };
-        processInfo = {
-          pid: 12345,
-          memoryUsage: processMemory,
-          uptime: 3600 // 1 hour
-        };
-      } else {
-        // Use real process values
-        let proc: any;
-        try {
-          proc = eval('require')('process');
-        } catch {
-          // Fallback to global process if require fails
-          proc = globalThis.process;
-        }
-        processMemory = proc.memoryUsage();
-        processInfo = {
-          pid: proc.pid,
-          memoryUsage: processMemory,
-          uptime: proc.uptime()
-        };
+      // Collect process metrics using type-safe module access
+      // Simulate process errors if requested
+      if (this.testErrorSimulation?.processError) {
+        throw new Error("Process error");
       }
+      
+      const processModule = NodeModuleAccessor.getProcessModule();
+      const processMemory = processModule.memoryUsage();
+      const processInfo: ProcessMetrics = {
+        pid: processModule.pid,
+        memoryUsage: processMemory,
+        uptime: processModule.uptime()
+      };
 
       // Collect disk metrics (minimal implementation)
       const disk: DiskMetrics | null = {};
@@ -821,7 +758,9 @@ cpu_utilization ${metrics.cpu.utilization}
       if (this.config.emergencyCleanup) {
         const pressureLevel = this.calculatePressureLevel(this.currentMetrics);
         if (pressureLevel === ResourcePressureLevel.EMERGENCY) {
-          this.triggerEmergencyCleanup();
+          this.triggerEmergencyCleanup().catch((cleanupError: unknown) => {
+            logger.error("Emergency cleanup failed", { cleanupError });
+          });
         }
       }
 

@@ -116,7 +116,7 @@ async function initialize() {
       sessionTimeout: 30 * 60 * 1000, // 30 minutes
       maxActiveSessions: 50,
       persistSessions: true
-    }, (storage as any).sqlite);
+    }, storage.getDatabase());
 
     // Initialize health checker
     // healthChecker = new HealthChecker({
@@ -165,7 +165,7 @@ function registerTools() {
       
       // Get workspace and session
       const workspaceId = await workspaceManager.detectWorkspace();
-      const session = await sessionManager.getOrCreateSession(
+      const session = sessionManager.getOrCreateSession(
         workspaceId, 
         process.env.SESSION_ID
       );
@@ -271,7 +271,7 @@ function registerTools() {
       try {
         // Get workspace and session
         const workspaceId = await workspaceManager.detectWorkspace();
-        const session = await sessionManager.getOrCreateSession(
+        const session = sessionManager.getOrCreateSession(
           workspaceId,
           process.env.SESSION_ID
         );
@@ -364,7 +364,7 @@ function registerTools() {
       try {
         // Get workspace and session
         const workspaceId = await workspaceManager.detectWorkspace();
-        const session = await sessionManager.getOrCreateSession(
+        const session = sessionManager.getOrCreateSession(
           workspaceId,
           process.env.SESSION_ID
         );

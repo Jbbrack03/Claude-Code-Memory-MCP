@@ -320,7 +320,7 @@ export interface VectorConfig {
   };
   customPruningStrategy?: {
     name: string;
-    selectForPruning: (vectors: any[], count: number) => string[];
+    selectForPruning: (vectors: Array<{ id: string; metadata: Metadata; vector: number[] }>, count: number) => string[];
   };
   
   // Memory monitoring
@@ -491,8 +491,8 @@ export interface WorkspaceStats {
 
 export interface ConfigRecommendation {
   type: string;
-  current: any;
-  recommended: any;
+  current: unknown;
+  recommended: unknown;
   reason: string;
   impact: string;
 }
@@ -1889,7 +1889,13 @@ export class VectorStore {
     const vectors = candidateVectors || Array.from(this.vectors.entries()).map(([id, data]) => ({ id, data }));
     
     if (this.config.customPruningStrategy && strategy === 'custom') {
-      return this.config.customPruningStrategy.selectForPruning(vectors, count);
+      // Transform vectors to the expected flat format for custom pruning strategy
+      const flattedVectors = vectors.map(v => ({
+        id: v.id,
+        metadata: v.data.metadata,
+        vector: v.data.vector
+      }));
+      return this.config.customPruningStrategy.selectForPruning(flattedVectors, count);
     }
     
     switch (strategy) {
@@ -1994,7 +2000,7 @@ export class VectorStore {
   }
 
   // Public constraint and pruning API methods
-  async validateConstraints(item: { vector: number[]; metadata: Metadata }): Promise<ConstraintValidation> {
+  validateConstraints(item: { vector: number[]; metadata: Metadata }): ConstraintValidation {
     const vectorCount = this.vectors.size;
     const maxVectors = this.config.maxVectors || Number.MAX_SAFE_INTEGER;
     
@@ -2015,7 +2021,7 @@ export class VectorStore {
     };
   }
 
-  async getWorkspaceVectorCount(workspaceId: string): Promise<number> {
+  getWorkspaceVectorCount(workspaceId: string): number {
     if (!this.config.workspaceIsolation) {
       // Count manually if not tracking
       let count = 0;
@@ -2066,8 +2072,8 @@ export class VectorStore {
     return [...this.pruningHistory];
   }
 
-  async getWorkspaceStats(workspaceId: string): Promise<WorkspaceStats> {
-    const vectorCount = await this.getWorkspaceVectorCount(workspaceId);
+  getWorkspaceStats(workspaceId: string): WorkspaceStats {
+    const vectorCount = this.getWorkspaceVectorCount(workspaceId);
     
     // Calculate memory usage for this workspace
     let memoryUsage = 0;

@@ -57,24 +57,26 @@ export class EmbeddingGenerator {
     // Skip model loading in test environment
     if (process.env.NODE_ENV === 'test') {
       // Create a mock pipeline for tests
-      this.pipeline = async (input: string | string[]) => {
-        const texts = Array.isArray(input) ? input : [input];
-        // Create a flat array with all embeddings concatenated
-        const totalSize = texts.length * EMBEDDING_DIMENSION;
-        const allEmbeddings = new Float32Array(totalSize);
-        
-        texts.forEach((text, textIndex) => {
-          const cleanText = text || '';
-          // Generate deterministic embedding based on text content
-          const hash = cleanText.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-          const startIdx = textIndex * EMBEDDING_DIMENSION;
+      this.pipeline = (input: string | string[]) => {
+        return Promise.resolve().then(() => {
+          const texts = Array.isArray(input) ? input : [input];
+          // Create a flat array with all embeddings concatenated
+          const totalSize = texts.length * EMBEDDING_DIMENSION;
+          const allEmbeddings = new Float32Array(totalSize);
           
-          for (let i = 0; i < EMBEDDING_DIMENSION; i++) {
-            allEmbeddings[startIdx + i] = ((hash + i) % 100) / 100; // Values between 0 and 1
-          }
+          texts.forEach((text, textIndex) => {
+            const cleanText = text || '';
+            // Generate deterministic embedding based on text content
+            const hash = cleanText.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const startIdx = textIndex * EMBEDDING_DIMENSION;
+            
+            for (let i = 0; i < EMBEDDING_DIMENSION; i++) {
+              allEmbeddings[startIdx + i] = ((hash + i) % 100) / 100; // Values between 0 and 1
+            }
+          });
+          
+          return { data: allEmbeddings };
         });
-        
-        return { data: allEmbeddings };
       };
     } else {
       // Load the model
