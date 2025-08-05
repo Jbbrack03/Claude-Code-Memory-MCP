@@ -335,6 +335,74 @@ ls -la ~/.cache/huggingface/
   export HTTPS_PROXY=http://proxy.company.com:8080
   ```
 
+### 7. AI Model Memory Management
+
+**Symptoms**:
+- Out of memory errors during embedding generation
+- System becomes unresponsive when loading models
+- Model loading timeouts
+- Frequent model reloading
+
+**Diagnostics**:
+```bash
+# Check model memory usage
+claude-memory health --component=model-memory
+
+# Monitor real-time memory usage
+claude-memory monitor --memory --interval=1000
+
+# Check model memory limits
+grep MODEL_MEMORY ~/.env
+```
+
+**Solutions**:
+
+- **Out of Memory Errors**:
+  ```bash
+  # Reduce model memory limit
+  echo "MODEL_MEMORY_LIMIT_MB=256" >> .env
+  
+  # Enable aggressive cleanup
+  echo "MODEL_EMERGENCY_CLEANUP=true" >> .env
+  
+  # Use fallback models automatically
+  echo "MODEL_FALLBACK_ENABLED=true" >> .env
+  ```
+
+- **Model Loading Issues**:
+  ```bash
+  # Increase model loading timeout
+  echo "MODEL_LOAD_TIMEOUT=60000" >> .env
+  
+  # Pre-load models on startup
+  echo "MODEL_PRELOAD=true" >> .env
+  
+  # Use specific smaller models
+  echo "MODEL_FALLBACK_LIST=Xenova/all-MiniLM-L6-v2,Xenova/all-MiniLM-L12-v2" >> .env
+  ```
+
+- **Memory Monitoring**:
+  ```bash
+  # Enable detailed memory monitoring
+  echo "MODEL_MEMORY_MONITORING_ENABLED=true" >> .env
+  echo "MODEL_MEMORY_CHECK_INTERVAL=500" >> .env
+  
+  # View memory statistics
+  claude-memory stats --model-memory --verbose
+  ```
+
+- **System-wide Memory Pressure**:
+  ```bash
+  # Configure system memory awareness
+  echo "SYSTEM_MEMORY_THRESHOLD=0.8" >> .env
+  
+  # Limit total application memory
+  echo "MAX_MEMORY_SIZE_MB=1000" >> .env
+  
+  # Enable memory pressure responses
+  echo "MEMORY_PRESSURE_ENABLED=true" >> .env
+  ```
+
 ## Advanced Diagnostics
 
 ### Debug Mode

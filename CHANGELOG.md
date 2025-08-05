@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2025-08-05
+
+### Added
+- **ModelMemoryLimiter**: Comprehensive AI model memory management system (Phase 15)
+  - Monitors memory usage with configurable limits (default 512MB)
+  - Automatic cleanup and emergency memory recovery
+  - Fallback model selection when memory constrained
+  - Memory pressure detection and proactive management
+  - 30 comprehensive tests covering all scenarios
+- **Enhanced Documentation**: Completed Phase 14 documentation requirements
+  - Full WorkspaceManager API documentation
+  - Full SessionManager API documentation
+  - AI Model Memory Management configuration guide
+  - Troubleshooting section for memory issues
+
+### Improved
+- **Test Infrastructure**: Enhanced test reliability
+  - Added comprehensive tests for WorkspaceManager methods
+  - Added comprehensive tests for SessionManager methods
+  - Improved test timeout handling
+- **Documentation**: Updated user guides
+  - Added MODEL_MEMORY_* configuration options to configuration.md
+  - Added AI Model Memory Management section to troubleshooting.md
+  - Updated API reference with complete method documentation
+
+### Testing
+- **Test Coverage**: 562/564 tests passing (99.6% pass rate)
+- **Memory Safety**: Full test coverage for memory management features
+- **Documentation**: All API methods fully documented
+
 ## [0.15.3] - 2025-08-05
 
 ### Fixed

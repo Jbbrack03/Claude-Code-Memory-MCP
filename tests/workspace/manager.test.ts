@@ -531,6 +531,357 @@ describe('WorkspaceManager Unit Tests', () => {
     });
   });
 
+  describe('Workspace Initialization', () => {
+    describe('initializeWorkspace', () => {
+      it('should initialize existing workspace successfully', async () => {
+        await withTimeout(async () => {
+          // Given: Git workspace exists
+          mockGit.getCurrentState.mockResolvedValue({
+            repository: gitWorkspace,
+            branch: 'main',
+            commit: 'abc123',
+            remote: 'origin'
+          });
+
+          // When: Initializing workspace
+          await workspaceManager.initializeWorkspace(gitWorkspace);
+
+          // Then: Should complete without error and detect workspace
+          const detected = await workspaceManager.detectWorkspace(gitWorkspace);
+          expect(detected).toBe(gitWorkspace);
+        });
+      });
+
+      it('should throw error for non-existent workspace path', async () => {
+        await withTimeout(async () => {
+          // Given: Non-existent workspace path
+          const nonExistent = path.join(testDir, 'does-not-exist');
+
+          // When/Then: Initializing should throw error
+          await expect(workspaceManager.initializeWorkspace(nonExistent))
+            .rejects.toThrow('Workspace path does not exist');
+        });
+      });
+
+      it('should initialize npm workspace correctly', async () => {
+        await withTimeout(async () => {
+          // Given: NPM workspace exists
+          mockGit.getCurrentState.mockResolvedValue({
+            repository: null,
+            branch: null,
+            commit: null,
+            remote: null
+          });
+
+          // When: Initializing npm workspace
+          await workspaceManager.initializeWorkspace(npmWorkspace);
+
+          // Then: Should detect as npm workspace
+          const metadata = await workspaceManager.getWorkspaceMetadata(npmWorkspace);
+          expect(metadata.type).toBe('npm');
+          expect(metadata.packageName).toBe('@test/npm-package');
+        });
+      });
+
+      it('should initialize directory workspace when no git or npm found', async () => {
+        await withTimeout(async () => {
+          // Given: Plain directory
+          const plainDir = path.join(testDir, 'plain-directory');
+          await fs.mkdir(plainDir, { recursive: true });
+          
+          mockGit.getCurrentState.mockResolvedValue({
+            repository: null,
+            branch: null,
+            commit: null,
+            remote: null
+          });
+
+          // When: Initializing plain directory
+          await workspaceManager.initializeWorkspace(plainDir);
+
+          // Then: Should detect as directory workspace
+          const metadata = await workspaceManager.getWorkspaceMetadata(plainDir);
+          expect(metadata.type).toBe('directory');
+          expect(metadata.name).toBe('plain-directory');
+        });
+      });
+
+      it('should handle file system errors during initialization', async () => {
+        await withTimeout(async () => {
+          // Given: Mock fs.access to throw error
+          const originalAccess = fs.access;
+          (fs.access as jest.Mock) = jest.fn().mockRejectedValue(new Error('ENOENT: no such file'));
+
+          try {
+            // When/Then: Should throw workspace path error
+            await expect(workspaceManager.initializeWorkspace('/invalid/path'))
+              .rejects.toThrow('Workspace path does not exist');
+          } finally {
+            // Restore original function
+            (fs.access as any) = originalAccess;
+          }
+        });
+      });
+    });
+  });
+
+  describe('Workspace Configuration', () => {
+    describe('getWorkspaceConfig', () => {
+      it('should return default config when no workspace provided', async () => {
+        await withTimeout(async () => {
+          // Given: No workspace ID provided
+          // When: Getting workspace config
+          const config = await workspaceManager.getWorkspaceConfig();
+
+          // Then: Should return default configuration
+          expect(config).toEqual({
+            storageEnabled: true,
+            memoryLimit: 100 * 1024 * 1024,
+            sessionTimeout: 30 * 60 * 1000,
+            gitIntegration: true
+          });
+        });
+      });
+
+      it('should return default config when workspace has no config file', async () => {
+        await withTimeout(async () => {
+          // Given: Workspace without config file
+          // When: Getting workspace config
+          const config = await workspaceManager.getWorkspaceConfig(gitWorkspace);
+
+          // Then: Should return default configuration
+          expect(config).toEqual({
+            storageEnabled: true,
+            memoryLimit: 100 * 1024 * 1024,
+            sessionTimeout: 30 * 60 * 1000,
+            gitIntegration: true
+          });
+        });
+      });
+
+      it('should load and merge workspace-specific config file', async () => {
+        await withTimeout(async () => {
+          // Given: Workspace with custom config file
+          const customConfig = {
+            storageEnabled: false,
+            memoryLimit: 50 * 1024 * 1024,
+            customProperty: 'custom-value'
+          };
+          
+          const configPath = path.join(gitWorkspace, '.claude-memory-config.json');
+          await fs.writeFile(configPath, JSON.stringify(customConfig, null, 2));
+
+          // When: Getting workspace config
+          const config = await workspaceManager.getWorkspaceConfig(gitWorkspace);
+
+          // Then: Should merge with defaults
+          expect(config).toEqual({
+            storageEnabled: false,
+            memoryLimit: 50 * 1024 * 1024,
+            sessionTimeout: 30 * 60 * 1000, // default value
+            gitIntegration: true, // default value
+            customProperty: 'custom-value'
+          });
+        });
+      });
+
+      it('should handle corrupted config file gracefully', async () => {
+        await withTimeout(async () => {
+          // Given: Workspace with corrupted config file
+          const configPath = path.join(gitWorkspace, '.claude-memory-config.json');
+          await fs.writeFile(configPath, '{ invalid json content');
+
+          // When: Getting workspace config
+          const config = await workspaceManager.getWorkspaceConfig(gitWorkspace);
+
+          // Then: Should fallback to default configuration
+          expect(config).toEqual({
+            storageEnabled: true,
+            memoryLimit: 100 * 1024 * 1024,
+            sessionTimeout: 30 * 60 * 1000,
+            gitIntegration: true
+          });
+        });
+      });
+
+      it('should use current cached workspace when no ID provided', async () => {
+        await withTimeout(async () => {
+          // Given: Cached workspace with config
+          await workspaceManager.detectWorkspace(gitWorkspace);
+          
+          const customConfig = { memoryLimit: 200 * 1024 * 1024 };
+          const configPath = path.join(gitWorkspace, '.claude-memory-config.json');
+          await fs.writeFile(configPath, JSON.stringify(customConfig, null, 2));
+
+          // When: Getting config without specifying workspace
+          const config = await workspaceManager.getWorkspaceConfig();
+
+          // Then: Should use the cached workspace config
+          expect(config.memoryLimit).toBe(200 * 1024 * 1024);
+        });
+      });
+
+      it('should handle file system errors when reading config', async () => {
+        await withTimeout(async () => {
+          // Given: Mock fs.readFile to throw permission error
+          const originalReadFile = fs.readFile;
+          (fs.readFile as jest.Mock) = jest.fn()
+            .mockRejectedValue(new Error('EACCES: permission denied'));
+
+          try {
+            // When: Getting workspace config
+            const config = await workspaceManager.getWorkspaceConfig(gitWorkspace);
+
+            // Then: Should fallback to defaults
+            expect(config).toEqual({
+              storageEnabled: true,
+              memoryLimit: 100 * 1024 * 1024,
+              sessionTimeout: 30 * 60 * 1000,
+              gitIntegration: true
+            });
+          } finally {
+            // Restore original function
+            (fs.readFile as any) = originalReadFile;
+          }
+        });
+      });
+    });
+  });
+
+  describe('Workspace Metadata Updates', () => {
+    describe('updateWorkspaceMetadata', () => {
+      it('should update metadata in cache successfully', async () => {
+        await withTimeout(async () => {
+          // Given: Existing workspace metadata
+          await workspaceManager.getWorkspaceMetadata(gitWorkspace);
+          const customMetadata = { 
+            customField: 'custom-value',
+            lastUpdated: new Date().toISOString()
+          };
+
+          // When: Updating metadata
+          await workspaceManager.updateWorkspaceMetadata(gitWorkspace, customMetadata);
+
+          // Then: Should update cached metadata
+          const updated = await workspaceManager.getWorkspaceMetadata(gitWorkspace);
+          expect(updated.customField).toBe('custom-value');
+          expect(updated.lastUpdated).toBe(customMetadata.lastUpdated);
+          expect(updated.id).toBe(gitWorkspace); // Should preserve ID
+        });
+      });
+
+      it('should persist metadata to config file when possible', async () => {
+        await withTimeout(async () => {
+          // Given: Existing workspace
+          await workspaceManager.getWorkspaceMetadata(gitWorkspace);
+          const customMetadata = { 
+            projectType: 'web-app',
+            technologies: ['TypeScript', 'Node.js']
+          };
+
+          // When: Updating metadata
+          await workspaceManager.updateWorkspaceMetadata(gitWorkspace, customMetadata);
+
+          // Then: Should create/update config file
+          const configPath = path.join(gitWorkspace, '.claude-memory-config.json');
+          const configContent = await fs.readFile(configPath, 'utf-8');
+          const config = JSON.parse(configContent);
+          
+          expect(config.metadata).toEqual(customMetadata);
+          expect(config.storageEnabled).toBe(true); // Should include defaults
+        });
+      });
+
+      it('should handle metadata persistence errors gracefully', async () => {
+        await withTimeout(async () => {
+          // Given: Read-only workspace directory
+          const readOnlyDir = path.join(testDir, 'readonly-workspace');
+          await fs.mkdir(readOnlyDir, { recursive: true });
+          
+          // Mock fs.writeFile to throw permission error
+          const originalWriteFile = fs.writeFile;
+          (fs.writeFile as jest.Mock) = jest.fn()
+            .mockRejectedValue(new Error('EACCES: permission denied'));
+
+          try {
+            // When: Updating metadata (should not throw despite file error)
+            const customMetadata = { field: 'value' };
+            await workspaceManager.updateWorkspaceMetadata(readOnlyDir, customMetadata);
+
+            // Then: Should still update cache even if file write fails
+            const updated = await workspaceManager.getWorkspaceMetadata(readOnlyDir);
+            expect(updated.field).toBe('value');
+          } finally {
+            // Restore original function
+            (fs.writeFile as any) = originalWriteFile;
+          }
+        });
+      });
+
+      it('should preserve existing metadata when updating', async () => {
+        await withTimeout(async () => {
+          // Given: Workspace with existing metadata
+          await workspaceManager.getWorkspaceMetadata(npmWorkspace);
+          const initialUpdate = { version: '1.0.0', author: 'test' };
+          await workspaceManager.updateWorkspaceMetadata(npmWorkspace, initialUpdate);
+
+          // When: Updating with additional metadata
+          const additionalUpdate = { lastModified: '2024-01-01' };
+          await workspaceManager.updateWorkspaceMetadata(npmWorkspace, additionalUpdate);
+
+          // Then: Should preserve existing and add new metadata
+          const final = await workspaceManager.getWorkspaceMetadata(npmWorkspace);
+          expect(final.version).toBe('1.0.0');
+          expect(final.author).toBe('test');
+          expect(final.lastModified).toBe('2024-01-01');
+          expect(final.type).toBe('npm'); // Should preserve original metadata (npm workspace)
+          expect(final.packageName).toBe('@test/npm-package'); // Should preserve package metadata
+        });
+      });
+
+      it('should handle complex metadata structures', async () => {
+        await withTimeout(async () => {
+          // Given: Complex metadata object
+          const complexMetadata = {
+            project: {
+              name: 'test-project',
+              settings: {
+                debug: true,
+                features: ['feature1', 'feature2']
+              }
+            },
+            timestamps: {
+              created: new Date().toISOString(),
+              updated: new Date().toISOString()
+            }
+          };
+
+          // When: Updating with complex metadata
+          await workspaceManager.updateWorkspaceMetadata(gitWorkspace, complexMetadata);
+
+          // Then: Should handle nested objects correctly
+          const updated = await workspaceManager.getWorkspaceMetadata(gitWorkspace);
+          expect(updated.project).toEqual(complexMetadata.project);
+          expect(updated.timestamps).toEqual(complexMetadata.timestamps);
+        });
+      });
+
+      it('should override existing metadata fields when updated', async () => {
+        await withTimeout(async () => {
+          // Given: Existing metadata field
+          await workspaceManager.updateWorkspaceMetadata(gitWorkspace, { status: 'initial' });
+
+          // When: Updating same field with new value
+          await workspaceManager.updateWorkspaceMetadata(gitWorkspace, { status: 'updated' });
+
+          // Then: Should override previous value
+          const updated = await workspaceManager.getWorkspaceMetadata(gitWorkspace);
+          expect(updated.status).toBe('updated');
+        });
+      });
+    });
+  });
+
   describe('Edge Cases and Error Handling', () => {
     it('should handle file system permission errors', async () => {
       await withTimeout(async () => {

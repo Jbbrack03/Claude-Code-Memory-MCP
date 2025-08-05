@@ -42,6 +42,13 @@ RATE_LIMITING_ENABLED=true            # Enable rate limiting
 EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2      # Embedding model to use
 BATCH_SIZE=100                        # Batch processing size
 CACHE_TTL_SECONDS=3600               # Cache time-to-live
+
+# AI Model Memory Management
+MODEL_MEMORY_LIMIT_MB=512             # Maximum memory for AI models (default: 512MB)
+MODEL_MEMORY_MONITORING_ENABLED=true  # Enable model memory monitoring
+MODEL_MEMORY_CHECK_INTERVAL=1000      # Check interval in ms (default: 1000)
+MODEL_EMERGENCY_CLEANUP=true          # Enable emergency model cleanup
+MODEL_FALLBACK_ENABLED=true           # Use smaller models when memory limited
 ```
 
 ## Advanced Configuration

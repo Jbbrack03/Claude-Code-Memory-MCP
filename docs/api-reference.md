@@ -959,33 +959,219 @@ if (!health.components.storage.healthy) {
 
 ### WorkspaceManager
 
-The WorkspaceManager handles workspace detection, initialization, and metadata management. It ensures complete isolation between different projects.
+The WorkspaceManager handles workspace detection, initialization, and metadata management. It ensures complete isolation between different projects and provides workspace-specific configuration.
 
-#### detectWorkspace()
-Automatically detect and initialize workspace from a given path.
+#### Constructor
 
 ```typescript
-async detectWorkspace(path: string): Promise<Workspace>
+constructor(git?: GitIntegration)
 ```
 
 **Parameters:**
-- `path`: File system path to detect workspace from
+- `git`: Optional GitIntegration instance for enhanced Git repository detection
+
+#### detectWorkspace()
+Automatically detect and initialize workspace from a given path. Uses intelligent detection to identify Git repositories, NPM packages, or fallback to directory-based workspaces.
+
+```typescript
+async detectWorkspace(startPath?: string): Promise<string>
+```
+
+**Parameters:**
+- `startPath`: Optional file system path to detect workspace from (defaults to current working directory)
+
+**Returns:**
+- `string`: Absolute path to the detected workspace root
+
+**Detection Priority:**
+1. **Git Repository**: Searches for `.git` directory up the directory tree
+2. **NPM Package**: Searches for `package.json` up the directory tree
+3. **Directory**: Falls back to the provided directory as workspace
+
+**Example:**
+```typescript
+const manager = new WorkspaceManager();
+const workspacePath = await manager.detectWorkspace('/Users/project/src');
+// Returns: '/Users/project' (if it's a git repo)
+```
+
+#### initializeWorkspace()
+Initialize a workspace by detecting its type and caching its metadata.
+
+```typescript
+async initializeWorkspace(workspacePath: string): Promise<void>
+```
+
+**Parameters:**
+- `workspacePath`: Absolute path to the workspace to initialize
+
+**Throws:**
+- `Error`: If workspace path doesn't exist
+
+**Example:**
+```typescript
+await manager.initializeWorkspace('/Users/project');
+// Workspace is now detected and cached
+```
+
+#### getWorkspaceMetadata()
+Retrieve metadata for a workspace, including type, name, and source control information.
+
+```typescript
+async getWorkspaceMetadata(workspaceId: string): Promise<WorkspaceMetadata>
+```
+
+**Parameters:**
+- `workspaceId`: Workspace path/identifier
 
 **Returns:**
 ```typescript
-interface Workspace {
-  id: string;              // Unique workspace identifier
-  path: string;            // Absolute workspace path
-  name: string;            // Human-readable workspace name
-  gitInfo?: {              // Git repository information
-    remote?: string;       // Remote URL
-    branch: string;        // Current branch
-    commit: string;        // Current commit hash
-  };
-  createdAt: Date;         // First detection timestamp
-  lastAccessedAt: Date;    // Last access timestamp
-  metadata: Record<string, any>; // Custom metadata
+interface WorkspaceMetadata {
+  id: string;                    // Workspace identifier (path)
+  type: 'git' | 'npm' | 'directory';  // Workspace type
+  name: string;                  // Human-readable name
+  gitRemote?: string;            // Git remote URL (if git workspace)
+  packageName?: string;          // NPM package name (if npm workspace)
+  detectedAt: Date;              // When workspace was first detected
 }
+```
+
+**Example:**
+```typescript
+const metadata = await manager.getWorkspaceMetadata('/Users/project');
+console.log(metadata);
+// {
+//   id: '/Users/project',
+//   type: 'git',
+//   name: 'my-project',
+//   gitRemote: 'https://github.com/user/project.git',
+//   detectedAt: Date
+// }
+```
+
+#### getWorkspaceConfig()
+Retrieve configuration for a workspace, loading from `.claude-memory-config.json` if available.
+
+```typescript
+async getWorkspaceConfig(workspaceId?: string): Promise<WorkspaceConfig>
+```
+
+**Parameters:**
+- `workspaceId`: Optional workspace identifier (uses current workspace if not provided)
+
+**Returns:**
+```typescript
+interface WorkspaceConfig {
+  storageEnabled: boolean;       // Whether to enable memory storage
+  memoryLimit: number;           // Memory limit in MB
+  sessionTimeout: number;        // Session timeout in milliseconds
+  gitIntegration: boolean;       // Enable Git integration features
+  [key: string]: unknown;        // Additional custom configuration
+}
+```
+
+**Default Configuration:**
+```typescript
+{
+  storageEnabled: true,
+  memoryLimit: 512,            // 512 MB
+  sessionTimeout: 1800000,     // 30 minutes
+  gitIntegration: true
+}
+```
+
+**Configuration File Location:**
+- `<workspace>/.claude-memory-config.json`
+
+**Example:**
+```typescript
+// Get config for specific workspace
+const config = await manager.getWorkspaceConfig('/Users/project');
+
+// Get config for current workspace
+const currentConfig = await manager.getWorkspaceConfig();
+```
+
+#### updateWorkspaceMetadata()
+Update workspace metadata and persist to configuration file.
+
+```typescript
+async updateWorkspaceMetadata(
+  workspaceId: string, 
+  metadata: Record<string, unknown>
+): Promise<void>
+```
+
+**Parameters:**
+- `workspaceId`: Workspace identifier to update
+- `metadata`: Metadata object to merge with existing metadata
+
+**Behavior:**
+- Updates in-memory cache immediately
+- Attempts to persist to `.claude-memory-config.json`
+- Logs errors if persistence fails but doesn't throw
+- Preserves workspace ID during updates
+
+**Example:**
+```typescript
+await manager.updateWorkspaceMetadata('/Users/project', {
+  lastBuildTime: new Date(),
+  customField: 'value',
+  settings: {
+    autoSave: true
+  }
+});
+```
+
+#### switchWorkspace()
+Switch to a different workspace, updating the cache if needed.
+
+```typescript
+switchWorkspace(workspaceId: string): void
+```
+
+**Parameters:**
+- `workspaceId`: Workspace path to switch to
+
+**Throws:**
+- `Error`: If workspace doesn't exist
+
+**Example:**
+```typescript
+manager.switchWorkspace('/Users/another-project');
+// Now operating in the context of another-project
+```
+
+#### clearCache()
+Clear the workspace detection cache.
+
+```typescript
+clearCache(): void
+```
+
+**Example:**
+```typescript
+manager.clearCache();
+// All cached workspace metadata is cleared
+```
+
+#### getWorkspaceVectorCount()
+Get the number of vectors stored for a specific workspace.
+
+```typescript
+async getWorkspaceVectorCount(workspaceId: string): Promise<number>
+```
+
+**Parameters:**
+- `workspaceId`: Workspace identifier
+
+**Returns:**
+- `number`: Count of vectors in the workspace
+
+**Example:**
+```typescript
+const count = await manager.getWorkspaceVectorCount('/Users/project');
+console.log(`Workspace has ${count} vectors`);
 ```
 
 **Behavior:**
@@ -1123,35 +1309,279 @@ interface CleanupStats {
 
 ### SessionManager
 
-The SessionManager tracks Claude Code sessions, maintaining context continuity and session history.
+The SessionManager tracks Claude Code sessions, maintaining context continuity and session history. It provides session lifecycle management with automatic cleanup and persistence.
+
+#### Constructor
+
+```typescript
+constructor(config: Partial<SessionConfig> = {}, db?: SQLiteDatabase | null)
+```
+
+**Parameters:**
+- `config`: Session configuration options
+- `db`: Optional SQLite database for persistence
+
+```typescript
+interface SessionConfig {
+  sessionTimeout: number;      // Session timeout in milliseconds (default: 30 minutes)
+  maxActiveSessions: number;   // Maximum concurrent active sessions (default: 10)
+  persistSessions: boolean;    // Whether to persist sessions to database (default: true)
+}
+```
 
 #### createSession()
 Create a new session for a workspace.
 
 ```typescript
-async createSession(
+createSession(
   workspaceId: string,
-  metadata?: Record<string, any>
-): Promise<Session>
+  metadata: Record<string, unknown> = {}
+): Session
 ```
+
+**Parameters:**
+- `workspaceId`: Workspace identifier for the session
+- `metadata`: Optional metadata to attach to the session
 
 **Returns:**
 ```typescript
 interface Session {
-  id: string;              // Unique session ID
-  workspaceId: string;     // Associated workspace
-  startedAt: Date;         // Session start time
-  endedAt?: Date;          // Session end time
-  lastActivityAt: Date;    // Last activity timestamp
-  memoryCount: number;     // Memories in session
-  metadata: Record<string, any>;  // Session metadata
-  status: 'active' | 'ended' | 'expired';
+  id: string;                    // Unique session ID (format: session_timestamp_hash)
+  workspaceId: string;           // Associated workspace
+  startTime: Date;               // Session start time
+  lastActivity: Date;            // Last activity timestamp
+  endTime?: Date;                // Session end time (if ended)
+  metadata: Record<string, unknown>;  // Session metadata
+  isActive: boolean;             // Whether session is currently active
 }
 ```
 
 **Behavior:**
-- Auto-generates unique session ID
-- Links to current workspace
+- Auto-generates unique session ID with timestamp
+- Enforces maximum active sessions limit
+- Cleans up old sessions if at capacity
+- Persists to database if configured
+- Starts cleanup interval for expired sessions
+
+**Throws:**
+- `Error`: If maximum active sessions limit reached after cleanup
+
+**Example:**
+```typescript
+const session = manager.createSession('/Users/project', {
+  purpose: 'debugging',
+  userId: 'user123'
+});
+console.log(session.id); // session_1234567890_abcd1234
+```
+
+#### getSession()
+Retrieve a session by ID.
+
+```typescript
+getSession(sessionId: string): Session | null
+```
+
+**Parameters:**
+- `sessionId`: Session identifier to retrieve
+
+**Returns:**
+- `Session` object if found, `null` otherwise
+
+**Behavior:**
+- Checks in-memory cache first
+- Falls back to database if configured
+- Ends expired sessions automatically
+- Updates in-memory cache from database
+
+**Example:**
+```typescript
+const session = manager.getSession('session_1234567890_abcd1234');
+if (session && session.isActive) {
+  console.log('Session is active');
+}
+```
+
+#### getActiveSession()
+Get the currently active session for a workspace.
+
+```typescript
+getActiveSession(workspaceId?: string): Session | null
+```
+
+**Parameters:**
+- `workspaceId`: Optional workspace ID (returns any active session if not provided)
+
+**Returns:**
+- Most recently active `Session` or `null` if none found
+
+**Example:**
+```typescript
+// Get active session for specific workspace
+const activeSession = manager.getActiveSession('/Users/project');
+
+// Get any active session
+const anyActive = manager.getActiveSession();
+```
+
+#### endSession()
+End a session and mark it as inactive.
+
+```typescript
+endSession(sessionId: string): void
+```
+
+**Parameters:**
+- `sessionId`: Session ID to end
+
+**Behavior:**
+- Sets `endTime` to current timestamp
+- Marks session as inactive
+- Updates database if configured
+- Removes from active sessions cache
+
+**Example:**
+```typescript
+manager.endSession('session_1234567890_abcd1234');
+// Session is now ended and inactive
+```
+
+#### getSessionHistory()
+Retrieve session history for a workspace.
+
+```typescript
+getSessionHistory(workspaceId: string, limit: number = 50): Session[]
+```
+
+**Parameters:**
+- `workspaceId`: Workspace to get history for
+- `limit`: Maximum number of sessions to return (default: 50)
+
+**Returns:**
+- Array of `Session` objects, sorted by start time (newest first)
+
+**Behavior:**
+- Returns from cache if available
+- Queries database if configured
+- Filters by workspace ID
+- Limits results for performance
+
+**Example:**
+```typescript
+const history = manager.getSessionHistory('/Users/project', 10);
+console.log(`Found ${history.length} recent sessions`);
+```
+
+#### updateSessionActivity()
+Update the last activity timestamp for a session.
+
+```typescript
+updateSessionActivity(sessionId: string): void
+```
+
+**Parameters:**
+- `sessionId`: Session ID to update
+
+**Behavior:**
+- Updates `lastActivity` to current time
+- Prevents session from expiring
+- Updates database if configured
+
+**Example:**
+```typescript
+// Keep session alive during activity
+manager.updateSessionActivity(session.id);
+```
+
+#### cleanupInactiveSessions()
+Clean up expired sessions based on timeout configuration.
+
+```typescript
+cleanupInactiveSessions(): void
+```
+
+**Behavior:**
+- Runs automatically at intervals
+- Ends sessions inactive longer than `sessionTimeout`
+- Can be called manually for immediate cleanup
+- Logs cleanup actions
+
+**Example:**
+```typescript
+// Manual cleanup if needed
+manager.cleanupInactiveSessions();
+```
+
+#### getActiveSessions()
+Get all currently active sessions.
+
+```typescript
+getActiveSessions(): Session[]
+```
+
+**Returns:**
+- Array of all active sessions across all workspaces
+
+**Example:**
+```typescript
+const activeSessions = manager.getActiveSessions();
+console.log(`${activeSessions.length} active sessions`);
+```
+
+#### getActiveSessionsForWorkspace()
+Get active sessions for a specific workspace.
+
+```typescript
+getActiveSessionsForWorkspace(workspaceId: string): Session[]
+```
+
+**Parameters:**
+- `workspaceId`: Workspace identifier
+
+**Returns:**
+- Array of active sessions for the workspace
+
+**Example:**
+```typescript
+const workspaceSessions = manager.getActiveSessionsForWorkspace('/Users/project');
+console.log(`${workspaceSessions.length} active sessions in workspace`);
+```
+
+#### clearAllSessions()
+Clear all sessions (for testing/cleanup).
+
+```typescript
+clearAllSessions(): void
+```
+
+**Behavior:**
+- Ends all active sessions
+- Clears in-memory cache
+- Updates database if configured
+
+**Example:**
+```typescript
+// Reset all sessions
+manager.clearAllSessions();
+```
+
+#### close()
+Clean up resources and stop background tasks.
+
+```typescript
+close(): void
+```
+
+**Behavior:**
+- Stops cleanup interval
+- Closes database connections
+- Should be called on shutdown
+
+**Example:**
+```typescript
+// On application shutdown
+manager.close();
+```
 - Initializes activity tracking
 - Sets session as active
 
