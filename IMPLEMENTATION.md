@@ -14,9 +14,9 @@
 | 8 | Monitoring and Observability | ✅ Complete | 2025-08-01 | Metrics, tracing, alerts |
 | 9-12 | CLI Integration & Management | 🚧 Partial | - | Workspace/session components added |
 | 13 | Test Suite Stabilization | ✅ Complete | 2025-08-04 | Timeout fixes, performance |
-| 14 | Documentation Completeness | 🚧 In Progress | - | Updating all documentation |
-| 15 | Memory Safety | 🔲 Planned | - | Resource constraints needed |
-| 16 | Architecture Simplification | 🔲 Planned | - | Reduce complexity |
+| 14 | Documentation Completeness | ✅ Complete | 2025-08-05 | API and user docs complete |
+| 15 | Memory Safety | ✅ Complete | 2025-08-05 | Memory limiter, vector constraints |
+| 16 | Architecture Simplification | ✅ Complete | 2025-08-06 | SimpleMonitor, UnifiedCache, DI |
 
 ## Current Implementation Status
 

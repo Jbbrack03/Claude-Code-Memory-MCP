@@ -82,13 +82,15 @@ export class MockHookEnvironment extends EventEmitter {
       }
     }
 
+    // Start timing before latency simulation
+    const startTime = Date.now();
+
     // Simulate latency
     if (this.config.simulateLatency > 0) {
       await this.sleep(this.config.simulateLatency);
     }
 
     // Execute with timeout
-    const startTime = Date.now();
     let response: HookResponse;
 
     try {
