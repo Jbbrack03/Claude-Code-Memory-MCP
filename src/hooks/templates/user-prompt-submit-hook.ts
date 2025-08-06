@@ -62,10 +62,14 @@ export class UserPromptSubmitHook extends BaseHookTemplate {
         ));
       }
       
+      // Extract file references from the prompt
+      const fileReferences = this.extractFileReferences(eventData.prompt, eventData.metadata?.filePath);
+      
       // Prepare memory capture data
       const memoryData = {
         type: 'user_prompt',
         content: sanitizedData.prompt as string,
+        fileReferences,
         metadata: {
           ...(sanitizedData.metadata as Record<string, unknown>),
           source: eventData.metadata?.source ?? 'chat',
@@ -87,6 +91,36 @@ export class UserPromptSubmitHook extends BaseHookTemplate {
         { error: error instanceof Error ? error.stack : undefined }
       ));
     }
+  }
+
+  /**
+   * Extract file references from prompt text and metadata
+   */
+  private extractFileReferences(prompt: string, metadataFilePath?: string): string[] {
+    const fileReferences: string[] = [];
+    
+    // Add file from metadata if present
+    if (metadataFilePath) {
+      fileReferences.push(metadataFilePath);
+    }
+    
+    // Extract file patterns from prompt text
+    const filePatterns = [
+      /(?:^|\s)([./][\w/-]*\.\w+)(?:\s|$)/g, // ./src/file.ts or /path/to/file.ext
+      /(?:^|\s)(\w+\.(?:js|ts|tsx|jsx|py|java|cpp|c|h|css|html|json|md|yaml|yml|xml))(?:\s|$)/g, // filename.ext
+    ];
+    
+    for (const pattern of filePatterns) {
+      let match;
+      while ((match = pattern.exec(prompt)) !== null) {
+        const filePath = match[1]?.trim();
+        if (filePath && !fileReferences.includes(filePath)) {
+          fileReferences.push(filePath);
+        }
+      }
+    }
+    
+    return fileReferences;
   }
 }
 

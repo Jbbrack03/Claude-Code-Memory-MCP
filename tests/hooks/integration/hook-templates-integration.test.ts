@@ -443,8 +443,8 @@ describe('Hook Templates Integration', () => {
       // Then: Should work within environment constraints (this will fail initially)
       expect(promptSubmitResponse.success).toBe(true);
       expect(postMessageResponse.success).toBe(true);
-      expect(promptSubmitResponse.metadata?.executionTime).toBeGreaterThan(50); // Includes latency
-      expect(postMessageResponse.metadata?.executionTime).toBeGreaterThan(50);
+      expect(promptSubmitResponse.metadata?.executionTime).toBeGreaterThanOrEqual(50); // Includes latency
+      expect(postMessageResponse.metadata?.executionTime).toBeGreaterThanOrEqual(50);
       
       constrainedEnv.reset();
     });

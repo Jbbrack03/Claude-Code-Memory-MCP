@@ -34,8 +34,8 @@ export interface IMonitoringSystem {
 }
 
 export interface ICacheSystem {
-  get(key: string): Promise<any>;
-  set(key: string, value: any, ttl?: number): Promise<void>;
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown, ttl?: number): Promise<void>;
   delete(key: string): Promise<void>;
   clear(): Promise<void>;
   has(key: string): Promise<boolean>;
@@ -80,12 +80,12 @@ export interface StorageStatistics {
 export interface MetricsData {
   operations?: Record<string, number>;
   timing?: Record<string, number>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface HealthStatus {
   status: 'alive' | 'dead';
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface Timer {
@@ -95,7 +95,7 @@ export interface Timer {
 export interface HookEvent {
   type: string;
   tool?: string;
-  data: any;
+  data: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -161,15 +161,18 @@ export interface ComponentFactory {
 // ============================================================================
 
 class SimpleDependencyContainer implements DependencyContainer {
-  private factories = new Map<string, Map<string, () => any>>();
-  private singletons = new Map<string, Map<string, any>>();
+  private factories = new Map<string, Map<string, () => unknown>>();
+  private singletons = new Map<string, Map<string, unknown>>();
 
   register<T>(name: string, factory: () => T, options?: { name?: string }): void {
     const implName = options?.name || 'default';
     if (!this.factories.has(name)) {
       this.factories.set(name, new Map());
     }
-    this.factories.get(name)!.set(implName, factory);
+    const typeFactories = this.factories.get(name);
+    if (typeFactories) {
+      typeFactories.set(implName, factory);
+    }
   }
 
   resolve<T>(name: string, implementation?: string): T {
@@ -178,7 +181,11 @@ class SimpleDependencyContainer implements DependencyContainer {
     if (!typeFactories || !typeFactories.has(implName)) {
       throw new Error(`No implementation '${implName}' registered for '${name}'`);
     }
-    return typeFactories.get(implName)!();
+    const factory = typeFactories.get(implName);
+    if (!factory) {
+      throw new Error(`Factory not found for implementation '${implName}' of '${name}'`);
+    }
+    return factory() as T;
   }
 
   registerSingleton<T>(name: string, factory: () => T, options?: { name?: string }): void {
@@ -204,11 +211,12 @@ class MockStorageEngine implements IStorageEngine {
   private initialized = false;
   private memories: Memory[] = [];
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     this.initialized = true;
+    return Promise.resolve();
   }
 
-  async captureMemory(memory: MemoryInput): Promise<Memory> {
+  captureMemory(memory: MemoryInput): Promise<Memory> {
     if (!this.initialized) {
       throw new Error('Storage engine not initialized');
     }
@@ -217,10 +225,10 @@ class MockStorageEngine implements IStorageEngine {
       id: `mock-${Date.now()}-${Math.random()}`
     };
     this.memories.push(fullMemory);
-    return fullMemory;
+    return Promise.resolve(fullMemory);
   }
 
-  async queryMemories(filters?: QueryFilters): Promise<Memory[]> {
+  queryMemories(filters?: QueryFilters): Promise<Memory[]> {
     if (!this.initialized) {
       throw new Error('Storage engine not initialized');
     }
@@ -228,41 +236,43 @@ class MockStorageEngine implements IStorageEngine {
     if (filters?.sessionId) {
       result = result.filter(m => m.sessionId === filters.sessionId);
     }
-    return result;
+    return Promise.resolve(result);
   }
 
-  async getStatistics(): Promise<StorageStatistics> {
+  getStatistics(): Promise<StorageStatistics> {
     if (!this.initialized) {
       throw new Error('Storage engine not initialized');
     }
-    return {
+    return Promise.resolve({
       totalMemories: this.memories.length,
       totalSize: this.memories.reduce((sum, m) => sum + m.content.length, 0),
       memoriesByType: this.memories.reduce((acc, m) => {
         acc[m.eventType] = (acc[m.eventType] || 0) + 1;
         return acc;
       }, {} as Record<string, number>)
-    };
+    });
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.initialized = false;
     this.memories = [];
+    return Promise.resolve();
   }
 }
 
 class MockMonitoringSystem implements IMonitoringSystem {
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     // Mock implementation
+    return Promise.resolve();
   }
 
-  async getMetrics(): Promise<MetricsData> {
-    return {};
+  getMetrics(): Promise<MetricsData> {
+    return Promise.resolve({});
   }
 
-  async getHealthStatus(): Promise<HealthStatus> {
-    return { status: 'alive' };
+  getHealthStatus(): Promise<HealthStatus> {
+    return Promise.resolve({ status: 'alive' });
   }
 
   startTimer(_operation: string): Timer {
@@ -280,70 +290,77 @@ class MockMonitoringSystem implements IMonitoringSystem {
     // Mock implementation - does nothing
   }
 
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
     // Mock implementation
+    return Promise.resolve();
   }
 }
 
 class MockCacheSystem implements ICacheSystem {
-  private cache = new Map<string, any>();
+  private cache = new Map<string, unknown>();
 
-  async get(key: string): Promise<any> {
-    return this.cache.get(key);
+  get(key: string): Promise<unknown> {
+    return Promise.resolve(this.cache.get(key));
   }
 
-  async set(key: string, value: any, _ttl?: number): Promise<void> {
+  set(key: string, value: unknown, _ttl?: number): Promise<void> {
     this.cache.set(key, value);
+    return Promise.resolve();
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     this.cache.delete(key);
+    return Promise.resolve();
   }
 
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
     this.cache.clear();
+    return Promise.resolve();
   }
 
-  async has(key: string): Promise<boolean> {
-    return this.cache.has(key);
+  has(key: string): Promise<boolean> {
+    return Promise.resolve(this.cache.has(key));
   }
 
-  async size(): Promise<number> {
-    return this.cache.size;
+  size(): Promise<number> {
+    return Promise.resolve(this.cache.size);
   }
 
-  async keys(): Promise<string[]> {
-    return Array.from(this.cache.keys());
+  keys(): Promise<string[]> {
+    return Promise.resolve(Array.from(this.cache.keys()));
   }
 }
 
 class NoCacheSystem implements ICacheSystem {
-  async get(_key: string): Promise<any> {
-    return undefined;
+  get(_key: string): Promise<unknown> {
+    return Promise.resolve(undefined);
   }
 
-  async set(_key: string, _value: any, _ttl?: number): Promise<void> {
+  set(_key: string, _value: unknown, _ttl?: number): Promise<void> {
     // No-op
+    return Promise.resolve();
   }
 
-  async delete(_key: string): Promise<void> {
+  delete(_key: string): Promise<void> {
     // No-op
+    return Promise.resolve();
   }
 
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
     // No-op
+    return Promise.resolve();
   }
 
-  async has(_key: string): Promise<boolean> {
-    return false;
+  has(_key: string): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
-  async size(): Promise<number> {
-    return 0;
+  size(): Promise<number> {
+    return Promise.resolve(0);
   }
 
-  async keys(): Promise<string[]> {
-    return [];
+  keys(): Promise<string[]> {
+    return Promise.resolve([]);
   }
 }
 
@@ -352,11 +369,11 @@ class MockHookSystem implements IHookSystem {
     // Mock implementation
   }
 
-  async executeHook(event: HookEvent): Promise<HookResult | null> {
-    return {
+  executeHook(event: HookEvent): Promise<HookResult | null> {
+    return Promise.resolve({
       output: `Mock hook executed for ${event.type}`,
       exitCode: 0
-    };
+    });
   }
 
   close(): void {
@@ -371,16 +388,20 @@ class MockHookSystem implements IHookSystem {
 class SimpleComponentFactory implements ComponentFactory {
   constructor(
     private container: DependencyContainer, 
-    private _config: Config,
-    private customImplementations?: Map<string, Map<string, () => any>>
+    _config: Config,
+    private customImplementations?: Map<string, Map<string, () => unknown>>
   ) {}
 
-  async createStorageEngine(implementation: string): Promise<IStorageEngine> {
+  createStorageEngine(implementation: string): Promise<IStorageEngine> {
     // Check for custom implementations first
     if (this.customImplementations?.has('IStorageEngine')) {
-      const impls = this.customImplementations.get('IStorageEngine')!;
-      if (impls.has(implementation)) {
-        return impls.get(implementation)!();
+      const impls = this.customImplementations.get('IStorageEngine');
+      if (impls?.has(implementation)) {
+        const factory = impls.get(implementation);
+        if (factory) {
+          const result = factory();
+          return Promise.resolve(result as IStorageEngine);
+        }
       }
     }
     
@@ -390,23 +411,28 @@ class SimpleComponentFactory implements ComponentFactory {
     
     if (isMockContainer) {
       // Mock container - return instance directly
-      return new MockStorageEngine();
+      return Promise.resolve(new MockStorageEngine());
     }
     
     try {
-      return this.container.resolve<IStorageEngine>('IStorageEngine', implementation);
+      const result = this.container.resolve<IStorageEngine>('IStorageEngine', implementation);
+      return Promise.resolve(result);
     } catch (error) {
       // Fallback to create a new instance if not registered
-      return new MockStorageEngine();
+      return Promise.resolve(new MockStorageEngine());
     }
   }
 
-  async createMonitoringSystem(implementation: string): Promise<IMonitoringSystem> {
+  createMonitoringSystem(implementation: string): Promise<IMonitoringSystem> {
     // Check for custom implementations first
     if (this.customImplementations?.has('IMonitoringSystem')) {
-      const impls = this.customImplementations.get('IMonitoringSystem')!;
-      if (impls.has(implementation)) {
-        return impls.get(implementation)!();
+      const impls = this.customImplementations.get('IMonitoringSystem');
+      if (impls?.has(implementation)) {
+        const factory = impls.get(implementation);
+        if (factory) {
+          const result = factory();
+          return Promise.resolve(result as IMonitoringSystem);
+        }
       }
     }
     
@@ -416,23 +442,28 @@ class SimpleComponentFactory implements ComponentFactory {
     
     if (isMockContainer) {
       // Mock container - return instance directly
-      return new MockMonitoringSystem();
+      return Promise.resolve(new MockMonitoringSystem());
     }
     
     try {
-      return this.container.resolve<IMonitoringSystem>('IMonitoringSystem', implementation);
+      const result = this.container.resolve<IMonitoringSystem>('IMonitoringSystem', implementation);
+      return Promise.resolve(result);
     } catch (error) {
       // Fallback to create a new instance if not registered
-      return new MockMonitoringSystem();
+      return Promise.resolve(new MockMonitoringSystem());
     }
   }
 
-  async createCacheSystem(implementation: string): Promise<ICacheSystem> {
+  createCacheSystem(implementation: string): Promise<ICacheSystem> {
     // Check for custom implementations first
     if (this.customImplementations?.has('ICacheSystem')) {
-      const impls = this.customImplementations.get('ICacheSystem')!;
-      if (impls.has(implementation)) {
-        return impls.get(implementation)!();
+      const impls = this.customImplementations.get('ICacheSystem');
+      if (impls?.has(implementation)) {
+        const factory = impls.get(implementation);
+        if (factory) {
+          const result = factory();
+          return Promise.resolve(result as ICacheSystem);
+        }
       }
     }
     
@@ -442,23 +473,30 @@ class SimpleComponentFactory implements ComponentFactory {
     
     if (isMockContainer) {
       // Mock container - return instance directly
-      return implementation === 'no-cache' ? new NoCacheSystem() : new MockCacheSystem();
+      const instance = implementation === 'no-cache' ? new NoCacheSystem() : new MockCacheSystem();
+      return Promise.resolve(instance);
     }
     
     try {
-      return this.container.resolve<ICacheSystem>('ICacheSystem', implementation);
+      const result = this.container.resolve<ICacheSystem>('ICacheSystem', implementation);
+      return Promise.resolve(result);
     } catch (error) {
       // Fallback to create a new instance if not registered
-      return implementation === 'no-cache' ? new NoCacheSystem() : new MockCacheSystem();
+      const instance = implementation === 'no-cache' ? new NoCacheSystem() : new MockCacheSystem();
+      return Promise.resolve(instance);
     }
   }
 
-  async createHookSystem(implementation: string): Promise<IHookSystem> {
+  createHookSystem(implementation: string): Promise<IHookSystem> {
     // Check for custom implementations first
     if (this.customImplementations?.has('IHookSystem')) {
-      const impls = this.customImplementations.get('IHookSystem')!;
-      if (impls.has(implementation)) {
-        return impls.get(implementation)!();
+      const impls = this.customImplementations.get('IHookSystem');
+      if (impls?.has(implementation)) {
+        const factory = impls.get(implementation);
+        if (factory) {
+          const result = factory();
+          return Promise.resolve(result as IHookSystem);
+        }
       }
     }
     
@@ -468,14 +506,15 @@ class SimpleComponentFactory implements ComponentFactory {
     
     if (isMockContainer) {
       // Mock container - return instance directly
-      return new MockHookSystem();
+      return Promise.resolve(new MockHookSystem());
     }
     
     try {
-      return this.container.resolve<IHookSystem>('IHookSystem', implementation);
+      const result = this.container.resolve<IHookSystem>('IHookSystem', implementation);
+      return Promise.resolve(result);
     } catch (error) {
       // Fallback to create a new instance if not registered
-      return new MockHookSystem();
+      return Promise.resolve(new MockHookSystem());
     }
   }
 
@@ -484,7 +523,7 @@ class SimpleComponentFactory implements ComponentFactory {
     const instance = factory();
     const requiredMethods = ['initialize', 'captureMemory', 'queryMemories', 'getStatistics', 'close'];
     for (const method of requiredMethods) {
-      if (typeof (instance as any)[method] !== 'function') {
+      if (typeof (instance as unknown as Record<string, unknown>)[method] !== 'function') {
         throw new Error(`Implementation does not satisfy IStorageEngine interface: missing ${method}`);
       }
     }
@@ -494,7 +533,10 @@ class SimpleComponentFactory implements ComponentFactory {
       if (!this.customImplementations.has('IStorageEngine')) {
         this.customImplementations.set('IStorageEngine', new Map());
       }
-      this.customImplementations.get('IStorageEngine')!.set(name, factory);
+      const storageImpls = this.customImplementations.get('IStorageEngine');
+      if (storageImpls) {
+        storageImpls.set(name, factory);
+      }
     }
     
     this.container.register('IStorageEngine', factory, { name });
@@ -520,7 +562,7 @@ class SimpleComponentFactory implements ComponentFactory {
 export class InterfaceDefinitions {
   private container: DependencyContainer;
   private factory: ComponentFactory;
-  private customImplementations = new Map<string, Map<string, () => any>>();
+  private customImplementations = new Map<string, Map<string, () => unknown>>();
 
   constructor(private config: Config, container?: DependencyContainer) {
     this.container = container || new SimpleDependencyContainer();
@@ -561,23 +603,23 @@ export class InterfaceDefinitions {
     return this.factory;
   }
 
-  async registerStorageImplementation(implementation: string): Promise<void> {
+  registerStorageImplementation(implementation: string): void {
     // Register with the container (this will be tracked by mock containers in tests)
     this.container.register('IStorageEngine', () => new MockStorageEngine(), { name: implementation });
   }
 
-  async registerMonitoringImplementation(implementation: string): Promise<void> {
+  registerMonitoringImplementation(implementation: string): void {
     // Register with the container (this will be tracked by mock containers in tests)
     this.container.register('IMonitoringSystem', () => new MockMonitoringSystem(), { name: implementation });
   }
 
-  async registerCacheImplementation(implementation: string): Promise<void> {
+  registerCacheImplementation(implementation: string): void {
     // Register with the container (this will be tracked by mock containers in tests)
     const factory = implementation === 'no-cache' ? () => new NoCacheSystem() : () => new MockCacheSystem();
     this.container.register('ICacheSystem', factory, { name: implementation });
   }
 
-  async registerHookImplementation(implementation: string): Promise<void> {
+  registerHookImplementation(implementation: string): void {
     // Register with the container (this will be tracked by mock containers in tests)
     this.container.register('IHookSystem', () => new MockHookSystem(), { name: implementation });
   }

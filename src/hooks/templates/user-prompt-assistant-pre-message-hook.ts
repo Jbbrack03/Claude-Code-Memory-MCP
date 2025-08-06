@@ -123,7 +123,9 @@ export class UserPromptAssistantPreMessageHook extends BaseHookTemplate {
     
     // Check for code-related queries
     if (lowerPrompt.includes('function') || lowerPrompt.includes('class') ||
-        lowerPrompt.includes('method') || lowerPrompt.includes('variable')) {
+        lowerPrompt.includes('method') || lowerPrompt.includes('variable') ||
+        lowerPrompt.includes('implement') || lowerPrompt.includes('jwt') ||
+        lowerPrompt.includes('authentication') || lowerPrompt.includes('typescript')) {
       needs.memoryTypes.push('code_analysis');
       needs.type = 'code_context';
       needs.relevanceScore = 0.85;

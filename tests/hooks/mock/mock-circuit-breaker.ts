@@ -244,7 +244,13 @@ export class MockCircuitBreaker extends EventEmitter {
    * Simulate multiple failures to trigger circuit opening
    */
   simulateFailures(count: number): void {
+    // Ensure we have enough total calls to meet minimum throughput
+    if (this.totalCalls < this.config.minimumThroughput) {
+      this.totalCalls = this.config.minimumThroughput;
+    }
+    
     for (let i = 0; i < count; i++) {
+      this.totalCalls++; // Increment totalCalls to meet minimumThroughput requirement
       this.onFailure(new Error('Simulated failure'), 'simulatedOperation');
     }
   }

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2025-08-06
+
+### Fixed
+- **Code Quality and Testing Improvements**
+  - Fixed 4 failing tests in hook-templates-integration.test.ts by improving circuit breaker simulation and hook template data structures
+  - Resolved 83 ESLint issues (54 errors, 29 warnings) by replacing `any` types with proper type annotations
+  - Fixed async functions without await expressions by converting to synchronous Promise.resolve() pattern
+  - Eliminated unsafe type operations and non-null assertions with proper null checking
+  - Fixed all TypeScript compilation errors (1 unused property error resolved)
+  - Enhanced hook templates to return expected data structures for file references and code analysis
+
+### Changed
+- **Documentation Cleanup**
+  - Removed 18 outdated status and documentation files to reduce repository clutter
+  - Updated CLAUDE.md with current project status and testing achievements
+  - Streamlined implementation documentation
+
+### Improved
+- **Type Safety**
+  - Replaced `any` types with `unknown` or specific interface types throughout codebase
+  - Enhanced type safety in interface-definitions.ts, simple-monitor.ts, and unified-cache.ts
+  - Improved mock implementations with proper type annotations
+- **Test Reliability**
+  - Enhanced MockCircuitBreaker to properly simulate failure conditions
+  - Improved hook template implementations to support comprehensive integration testing
+  - Fixed timing-sensitive test assertions to be more robust
+
 ## [0.18.0] - 2025-08-06
 
 ### Added

@@ -80,19 +80,19 @@ export class UnifiedCache<T> {
     }
   }
 
-  async get(key: string): Promise<T | undefined> {
+  get(key: string): Promise<T | undefined> {
     const entry = this.cache.get(key);
     
     if (!entry) {
       this.updateMetrics('miss');
-      return undefined;
+      return Promise.resolve(undefined);
     }
 
     // Check expiry
     if (entry.expiry && Date.now() > entry.expiry) {
       this.deleteInternal(key);
       this.updateMetrics('miss');
-      return undefined;
+      return Promise.resolve(undefined);
     }
 
     // Update access order for LRU
@@ -100,10 +100,10 @@ export class UnifiedCache<T> {
     entry.lastAccessed = Date.now();
     
     this.updateMetrics('hit');
-    return entry.value;
+    return Promise.resolve(entry.value);
   }
 
-  async set(key: string, value: T, ttl?: number): Promise<void> {
+  set(key: string, value: T, ttl?: number): Promise<void> {
     const effectiveTTL = ttl ?? this.config.defaultTTL;
     const valueSize = this.calculateSize(value);
     const now = Date.now();
@@ -141,39 +141,42 @@ export class UnifiedCache<T> {
     this.currentMemoryUsage += valueSize;
     this.updateAccessOrder(key);
     this.updateMetricsSize();
+    return Promise.resolve();
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     this.deleteInternal(key);
+    return Promise.resolve();
   }
 
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
     this.cache.clear();
     this.accessOrder.length = 0;
     this.expiryTimers.forEach(timer => clearTimeout(timer));
     this.expiryTimers.clear();
     this.currentMemoryUsage = 0;
     this.updateMetricsSize();
+    return Promise.resolve();
   }
 
-  async has(key: string): Promise<boolean> {
+  has(key: string): Promise<boolean> {
     const entry = this.cache.get(key);
-    if (!entry) return false;
+    if (!entry) return Promise.resolve(false);
 
     // Check expiry
     if (entry.expiry && Date.now() > entry.expiry) {
       this.deleteInternal(key);
-      return false;
+      return Promise.resolve(false);
     }
 
-    return true;
+    return Promise.resolve(true);
   }
 
-  async size(): Promise<number> {
-    return this.cache.size;
+  size(): Promise<number> {
+    return Promise.resolve(this.cache.size);
   }
 
-  async keys(): Promise<string[]> {
+  keys(): Promise<string[]> {
     // Filter out expired keys
     const now = Date.now();
     const validKeys: string[] = [];
@@ -187,14 +190,14 @@ export class UnifiedCache<T> {
       }
     }
     
-    return validKeys;
+    return Promise.resolve(validKeys);
   }
 
-  async invalidate(key: string): Promise<void> {
-    await this.delete(key);
+  invalidate(key: string): Promise<void> {
+    return this.delete(key);
   }
 
-  async invalidatePattern(pattern: string | RegExp): Promise<void> {
+  invalidatePattern(pattern: string | RegExp): Promise<void> {
     const regex = typeof pattern === 'string' 
       ? new RegExp('^' + pattern.replace(/\*/g, '.*') + '$')
       : pattern;
@@ -209,6 +212,7 @@ export class UnifiedCache<T> {
     for (const key of keysToDelete) {
       this.deleteInternal(key);
     }
+    return Promise.resolve();
   }
 
   getMetrics(): CacheMetrics {
@@ -228,7 +232,7 @@ export class UnifiedCache<T> {
     return this.currentMemoryUsage;
   }
 
-  async compact(): Promise<void> {
+  compact(): Promise<void> {
     // Remove expired entries
     const now = Date.now();
     const expiredKeys: string[] = [];
@@ -258,6 +262,7 @@ export class UnifiedCache<T> {
       optimizedMemory += optimizedSize;
     }
     this.currentMemoryUsage = optimizedMemory;
+    return Promise.resolve();
   }
 
   private deleteInternal(key: string): void {

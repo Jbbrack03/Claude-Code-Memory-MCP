@@ -244,15 +244,26 @@ export class UserPromptAssistantMessageHook extends BaseHookTemplate {
       analysis.importance += 0.15;
     }
     
-    // Extract file modifications
-    const fileMatches = message.match(/(?:created?|wrote|updated?|deleted?|modified)\s+(?:file\s+)?([./][\w/-]+\.\w+)/gi);
-    if (fileMatches) {
-      analysis.filesModified = fileMatches
-        .map(match => {
-          const fileMatch = match.match(/([./][\w/-]+\.\w+)/);
-          return fileMatch ? fileMatch[1] : undefined;
-        })
-        .filter((file): file is string => Boolean(file));
+    // Extract file modifications - improved pattern matching
+    const filePatterns = [
+      /(?:created?|wrote|updated?|deleted?|modified)\s+(?:file\s+)?([./]?\w+\.(?:ts|js|py|java|cpp|c|h|json|md|yaml|yml|xml|html|css))/gi,
+      /I(?:'ve|'m)\s+(?:created?|wrote|updated?|deleted?|modified)\s+([./]?\w+\.(?:ts|js|py|java|cpp|c|h|json|md|yaml|yml|xml|html|css))/gi,
+      /(?:created?|wrote|updated?|deleted?|modified)\s+([./]?\w+\.(?:ts|js|py|java|cpp|c|h|json|md|yaml|yml|xml|html|css))/gi,
+    ];
+    
+    const filesFound = new Set<string>();
+    for (const pattern of filePatterns) {
+      let match;
+      while ((match = pattern.exec(message)) !== null) {
+        const filename = match[1]?.trim();
+        if (filename) {
+          filesFound.add(filename);
+        }
+      }
+    }
+    
+    if (filesFound.size > 0) {
+      analysis.filesModified = Array.from(filesFound);
       analysis.categories.push('file_operations');
       analysis.importance += 0.25;
     }

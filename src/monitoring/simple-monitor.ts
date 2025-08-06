@@ -54,7 +54,7 @@ export class SimpleMonitor extends EventEmitter {
   private healthy = true;
   private errorMessage?: string;
   private healthCheckInterval?: NodeJS.Timeout;
-  private storageIntegration?: any;
+  private storageIntegration?: { getStatistics(): Promise<{ totalMemories: number; totalSize: number }> };
   private logHandlers: Array<(level: string, message: string, timestamp?: number) => void> = [];
   private healthCheckHandlers: Array<() => void> = [];
   private errorHandlers: Array<(error: Error) => void> = [];
@@ -128,7 +128,7 @@ export class SimpleMonitor extends EventEmitter {
     const memUsage = process.memoryUsage();
     
     // Build minimal metrics object with optimal construction
-    const operations: any = {
+    const operations: { total: number; byType: Record<string, number>; averageDuration?: number } = {
       total: this.totalOperations,
       byType: this.operationCounts.size > 0 ? Object.fromEntries(this.operationCounts) : {}
     };
@@ -165,15 +165,15 @@ export class SimpleMonitor extends EventEmitter {
     return metrics;
   }
 
-  async getHealthStatus(): Promise<SimpleHealthStatus> {
+  getHealthStatus(): Promise<SimpleHealthStatus> {
     const currentTime = Date.now();
     
-    return {
+    return Promise.resolve({
       status: this.healthy ? 'alive' : 'dead',
       timestamp: currentTime,
       uptime: currentTime - this.startTime,
       ...(this.errorMessage && { error: this.errorMessage })
-    };
+    });
   }
 
   incrementOperationCount(operationType: string): void {
@@ -277,7 +277,7 @@ export class SimpleMonitor extends EventEmitter {
     });
   }
 
-  integrateWithStorage(storage: any): void {
+  integrateWithStorage(storage: { getStatistics(): Promise<{ totalMemories: number; totalSize: number }> }): void {
     this.storageIntegration = storage;
   }
 
